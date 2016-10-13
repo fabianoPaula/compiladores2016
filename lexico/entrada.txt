@@ -1,0 +1,13 @@
+
+int norma(int x, int y){
+    return sqrt(x,y);
+}
+
+int main(){
+    int result = 7;
+    if( var = (5 + 2) ){
+	printf("HelloWord!\n");
+    }
+    return 0;
+}
+
