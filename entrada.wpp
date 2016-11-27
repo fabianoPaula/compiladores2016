@@ -1,0 +1,12 @@
+
+
+numero a,b,leite,elefante;
+	
+
+com tente começar e mi da numero ,tranquilo? 
+
+	a = 20 + 260 + 90;
+	escreveAi("IA teste");
+
+	escreveAi("Compiladores teste");
+favoravel

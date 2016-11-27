@@ -1,7 +1,8 @@
-all: trabalho.out entrada.cc
-	./trabalho.out < entrada.cc 
-#   > gerado.cc
-#	./gabarito < gerado.cc
+all: trabalho.out entrada.wpp
+	./trabalho.out < entrada.wpp > gerado.cc
+	g++ -std=c++11 -o program.out gerado.cc -lfl
+	./program.out
+
 
 lex.yy.c: trabalho.lex
 	lex trabalho.lex
