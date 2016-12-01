@@ -32,4 +32,5 @@
 
 *.yy.c
 *.tab.c
-
+*.output
+gerado.cc

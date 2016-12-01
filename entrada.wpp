@@ -1,12 +1,20 @@
 
+variaveis
+	numero a,b;
+	palavra teste;
 
-numero a,b,leite,elefante;
-	
+	numero[10] vetor;
 
-com tente começar e mi da numero ,tranquilo? 
+	numeroComVirgula deste;
 
-	a = 20 + 260 + 90;
-	escreveAi("IA teste");
+	simounão bonito;
 
-	escreveAi("Compiladores teste");
+
+
+tente começar devolve numero 
+,tranquilo? 
+	a = 2;
+ 	vetor[a*a+1] = 10;
+	escreveAi(vetor[2*a+1]);
 favoravel
+

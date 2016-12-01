@@ -11,55 +11,86 @@ using namespace std;
 int yylex();
 void yyerror( const char* st );
 
-
-
-
 struct Atributos {
   string v, t, c; // Valor, tipo e código gerado.
   vector<string> lista; // Uma lista auxiliar.
 
   string var_temp; // Variaveis temporárias criadas
   
-  Atributos() {} // Constutor vazio
+  Atributos() { // Constutor vazio
+    v = "";
+    t = "";
+    c = "";
+    var_temp = "";
+  } 
+
   Atributos( string valor ) {
     v = valor;
+    t = "";
+    c = "";
+    var_temp = "";
   }
 
   Atributos( string valor, string tipo ) {
     v = valor;
     t = tipo;
+    c = "";
+    var_temp = "";
   }
 };
 
 
-struct Variaveis{
-  string t, contexto;
+#define MAX_DIM 2
+struct TipoGeral{
+  string t;
+  int ndim;
+  int tam[MAX_DIM];
 
-  Variaveis() {}
-  Variaveis(string tipo) {
+  TipoGeral() {} // Constutor Vazio
+
+  TipoGeral(string tipo) {
     t = tipo;
+    ndim = 0;
+    tam[0] = -1;
+    tam[1] = -1;
   }
 
-  Variaveis(string tipo, string contextVar) {
+  TipoGeral(string tipo, int v1) {
     t = tipo;
-    contexto = contextVar;
+    ndim = 1;
+    tam[0] = v1;
+    tam[1] = -1;
   }
 
+  TipoGeral(string tipo, int v1, int v2) {
+    t = tipo;
+    ndim = 2;
+    tam[0] = v1;
+    tam[1] = v2;
+  }
 };
 
 map< string, string > tipo_opr;
-map< string, string > tipo_tipo_c;
 
-
-map<string,Variaveis> tabela_simbolos;
+map<string,TipoGeral> tabela_simbolos;
 
 // Declarar todas as funções que serão usadas.
+
+// Funções que mexem na tabela_simbolos
 string consulta_ts( string nome_var );
+void inserir_ts( string nome_var, TipoGeral tipo);
+
+Atributos cria_variavel(string tipo, vector<string> lista, int dim, int s1, int s2);
+
+
 string gera_nome_var_temp( string tipo );
-void gera_expressao_opr(Atributos* result, Atributos s1, Atributos s2, string opr);
+Atributos gera_codigo_opr(Atributos s1, string opr, Atributos s2);
 
 
-void debug( string producao, Atributos atr );
+// Funções auxiliares
+string toString(int n);
+int    toInt(string valor);
+void   debug( string producao, Atributos atr );
 
 
 string includes = 
@@ -76,23 +107,32 @@ string includes =
 %}
 
 // Token de blocos
-%token TK_TRANQUILO TK_FAVORAVEL TK_COMECAR TK_MI TK_E TK_DA
+%token TK_TRANQUILO TK_FAVORAVEL TK_COMECAR TK_DEVOLVE
 
 // Lista de parâmetros
-%token TK_COM TK_TENTE
+%token TK_COM TK_TENTE 
+
+// Varíáveis
+%token TK_VARIAVEIS TK_TIPO_NUMERO TK_TIPO_NUMERO_COM_VIRGULA TK_TIPO_LETRA TK_TIPO_PALAVRA TK_TIPO_SIMOUNAO
 
 // Entrada e Saida
 %token TK_ESCREVEAI TK_LEISSOAI
 
-%token TK_ID TK_CINT TK_CDOUBLE TK_VAR  TK_ATRIB
-%token TK_WRITELN TK_CSTRING
+// Tipos de valores
+%token TK_ID TK_CINT TK_CDOUBLE TK_ATRIB TK_CSTRING
+%token TK_VERDADE TK_MENTIRA
 
+// Parte dos operadores
+%token TK_MAIG TK_MEIG TK_DIF TK_E TK_OU TK_IGUAL
 
+%left TK_E TK_OU
+%nonassoc '<' '>' TK_MAIG TK_MEIG TK_IGUAL TK_DIF 
 %left '+' '-'
 %left '*' '/'
 
 %%
 
+/* Escopo Principal */
 S : DECLS COMECA
     {
       cout << includes << endl;
@@ -100,114 +140,117 @@ S : DECLS COMECA
       cout << $2.c << endl;
     }
   ;
+
+/* Declaração de variáveis e funções */
     
-DECLS : VARS DECLS { $$.c = $1.c + "\n" + $2.c; }
-      | 
+DECLS : BLOCO_VARS DECLS { $$.c = $1.c + "\n" + $2.c;  }
+      | { $$.c = ""; }
       ;  
 
-// DECL : VARS ;
+BLOCO_VARS : TK_VARIAVEIS VARS { $$.c = $2.c; }
+           ;
 
-VARS : VAR ';' VARS { $$.c = $1.c + "\n" + $2.c;}
 
-     | 
+VARS : VAR ';' VARS { $$.c = $1.c + "\n" + $3.c; }
+     | VAR ';'      { $$.c = $1.c; }
      ;     
      
-VAR : TK_ID IDS 
-        {  
-           $$.c = tipo_tipo_c[tipo_tipo_c[$1.v]] + " " + $2.c;
-           vector<string>::iterator it;
-           for( it = $2.lista.begin(); it != $2.lista.end(); it++)
-              tabela_simbolos[*it] = Variaveis(tipo_tipo_c[$1.v], "");
-        }
+VAR : TIPO_VAR IDS                 { $$ = cria_variavel($1.t, $2.lista, 0, -1,-1); }
+    | TIPO_VAR '[' TK_CINT ']' IDS { $$ = cria_variavel($1.t, $5.lista, 1, toInt($3.v),-1); }
     ;
-    
-IDS : TK_ID ',' IDS {  $$.c = $1.v + ',' + $3.c;
-                       $$.lista.push_back($1.v); }
-    | TK_ID { $$.c = $1.v + ";"; 
-              $$.lista.push_back($1.v); }
-    ;          
 
-COMECA : PARAMS TK_COMECAR TK_E TK_MI TK_DA TK_ID BLOCO
-       {  
-          $$.c = "\n\nint main()\n" + $7.c;        
-       } 
+TIPO_VAR : TK_TIPO_NUMERO             { $$ = $1; }
+         | TK_TIPO_NUMERO_COM_VIRGULA { $$ = $1; }
+         | TK_TIPO_LETRA              { $$ = $1; }
+         | TK_TIPO_PALAVRA            { $$ = $1; }
+         | TK_TIPO_SIMOUNAO           { $$ = $1; }
+         ;
+
+    
+IDS : TK_ID ',' IDS {                    
+                      $3.lista.push_back($1.v); 
+                      $$ = $3;
+                    }
+    | TK_ID { $1.lista.push_back($1.v); $$ = $1;/* debug("IDS : TK_ID ",$$); */}
+    ; 
+
+
+// Declaração  do método Principal
+
+COMECA : PARAMS TK_COMECAR TK_DEVOLVE TIPO_VAR BLOCO_VARS BLOCO {  $$.c = $5.c + "\nint main()\n" + $6.c; }
+       | PARAMS TK_COMECAR TK_DEVOLVE TIPO_VAR BLOCO { $$.c = "\nint main()\n" + $5.c; }  
        ;
 
-PARAMS: TK_COM VARS TK_TENTE
+PARAMS: TK_COM TK_TENTE
       | TK_TENTE
       ;
      
-BLOCO : TK_TRANQUILO CMDS TK_FAVORAVEL
-        { $$.c = "{\n" + $2.var_temp + $2.c + "\n}\n";      
-        }
+BLOCO : TK_TRANQUILO CMDS TK_FAVORAVEL { $$.c = "{\n" + $2.var_temp + $2.c + "\n}\n"; }
       ;  
       
-CMDS : CMD CMDS
-       { $$.c = $1.c + $2.c; 
-         $$.var_temp = $1.var_temp + $2.var_temp; }
-     |
+CMDS : CMD ';' CMDS
+       { $$.c = $1.c + $3.c; 
+         $$.var_temp = $1.var_temp + $3.var_temp; }
+     | CMD ';'
+       { $$.c = $1.c; 
+         $$.var_temp = $1.var_temp; }
      ;  
      
 CMD : WRITELN
+    | READLN
     | ATRIB 
     ;     
 
-WRITELN : TK_ESCREVEAI '(' E ')' ';'
+READLN : TK_LEISSOAI '(' E ',' NOME_VAR ')'
           {  
-            $$.c = $3.c + "  cout << " + $3.v + " << endl;";
+            $$.c = $3.c + "  cout << " + $3.v + ";\n  cout << endl;\n"
+                        + "  cin  >> " + $5.v + ";\n";
+            $$.var_temp = $3.var_temp;
+            //debug("WRITELN : TK_ESCREVEAI ( E )", $$);
+          }
+        ;
+
+WRITELN : TK_ESCREVEAI '(' E ')'
+          {  
+            $$.c = $3.c + "  cout << " + $3.v + ";\n  cout << endl;\n";
             $$.var_temp = $3.var_temp;
             //debug("WRITELN : TK_ESCREVEAI ( E )", $$);
           }
         ;
   
-ATRIB : TK_ID TK_ATRIB E ';'
-        { $$.c = $3.c + "  " + $1.v + " = " + $3.v + ";\n"; 
-          $$.var_temp = $3.var_temp;
-          //debug( "ATRIB : TK_ID TK_ATRIB E ';'", $$ );
+ATRIB : F TK_ATRIB E 
+        { $$.c = $1.c + $3.c+ "  " + $1.v + " = " + $3.v + ";\n"; 
+          $$.var_temp = $1.var_temp + $3.var_temp;
         } 
       ;   
 
-E : E '+' E
-    { 
-      gera_expressao_opr(&$$,$1,$3,"+");
-      //debug( "E: E '+' E", $$ );
-    }
-  | E '-' E
-    { 
-      gera_expressao_opr(&$$,$1,$3,"-");
-      //debug( "E: E '-' E", $$ );
-    }
-  | E '*' E
-    { 
-      gera_expressao_opr(&$$,$1,$3,"*");
-      //debug( "E: E '*' E", $$ );
-    }
-  | E '/' E
-    { 
-      gera_expressao_opr(&$$,$1,$3,"/");
-      //debug( "E: E '/' E", $$ );
-    }
-  | '(' E ')'
-
-  | F {
-      $$.t = $1.t;
-      $$.v = $1.v;
-      //debug("E : F", $$);
-  }
+E : E '+' E      { $$ = gera_codigo_opr( $1, "+", $3 ); }
+  | E '-' E      { $$ = gera_codigo_opr( $1, "-", $3 ); }
+  | E '*' E      { $$ = gera_codigo_opr( $1, "*", $3 ); }
+  | E '/' E      { $$ = gera_codigo_opr( $1, "/", $3 ); }
+  | E '<' E      { $$ = gera_codigo_opr( $1, "<", $3 ); }
+  | E '>' E      { $$ = gera_codigo_opr( $1, ">", $3 ); }
+  | E TK_MEIG E  { $$ = gera_codigo_opr( $1, "<=", $3 ); }
+  | E TK_MAIG E  { $$ = gera_codigo_opr( $1, ">=", $3 ); }
+  | E TK_IGUAL E { $$ = gera_codigo_opr( $1, "==", $3 ); }
+  | E TK_DIF E   { $$ = gera_codigo_opr( $1, "!=", $3 ); }
+  | E TK_E E     { $$ = gera_codigo_opr( $1, "e", $3 ); }
+  | E TK_OU E    { $$ = gera_codigo_opr( $1, "ou", $3 ); }
+  | '(' E ')'    { $$ = $2; }
+  | F            { $$ = $1; }
   ;
   
-F : TK_ID 
-    // Aind precisa completar com a tabela de símbolos
-    { $$.v = $1.v; $$.t = consulta_ts( $1.v ); $$.c = $1.c; }
-  | TK_CINT 
-    { $$.v = $1.v; $$.t = "i"; $$.c = $1.c; 
-     // debug("F: TK_ID",$$);
-    }
-  | TK_CDOUBLE
-    { $$.v = $1.v; $$.t = "d"; $$.c = $1.c; };
-  | TK_CSTRING
-    { $$.v = $1.v; $$.t = "s"; $$.c = $1.c; };
+F : NOME_VAR
+  | NOME_VAR '[' E ']' { $$.v = $1.v + '[' + $3.v + ']'; $$.t = $1.t; $$.c = $3.c;  $$.var_temp = $3.var_temp; }
+  | TK_CINT    { $$.v = $1.v; $$.t = "int"; $$.c = $1.c; }
+  | TK_CDOUBLE { $$.v = $1.v; $$.t = "double"; $$.c = $1.c; }
+  | TK_CSTRING { $$.v = $1.v; $$.t = "string"; $$.c = $1.c; }
+  | TK_VERDADE { $$.v = $1.v; $$.t = "int"; $$.c = $1.c; }
+  | TK_MENTIRA { $$.v = $1.v; $$.t = "int"; $$.c = $1.c; }
   ;
+
+NOME_VAR : TK_ID { $$.v = $1.v; $$.t = consulta_ts( $1.v ); $$.c = $1.c; }
+         ; 
   
 %%
 int nlinha = 1;
@@ -221,78 +264,136 @@ void debug( string producao, Atributos atr ) {
   cerr << "  t: " << atr.t << endl;
   cerr << "  v: " << atr.v << endl;
   cerr << "  c: " << atr.c << endl;
+  cerr << "  temp: " << atr.var_temp << endl;
 }
 
 void yyerror( const char* st )
 {
-  puts( st );
-  printf( "Linha: %d, [%s]\n", nlinha, yytext );
-  debug("",yylval);
+  printf( "Linha: %d, [%s]: %s\n", nlinha, yytext,st);
+  exit(0);
 }
+
+void error( string st )
+{
+  cout << "Linha: " << nlinha << ", [" << yytext << "]: "<< st << "%s\n";
+  exit(0);
+}
+
 
 void inicializa_operadores() {
   // Resultados para o operador "+"
-  tipo_opr["i+i"] = "i";
-  tipo_opr["i+d"] = "d";
-  tipo_opr["d+i"] = "d";
-  tipo_opr["d+d"] = "d";
-  tipo_opr["s+s"] = "s";
-  tipo_opr["c+s"] = "s";
-  tipo_opr["s+c"] = "s";
-  tipo_opr["c+c"] = "s";
+  tipo_opr["int+int"]       = "int";
+  tipo_opr["int+double"]    = "double";
+  tipo_opr["double+int"]    = "double";
+  tipo_opr["double+double"] = "double";
+  tipo_opr["string+string"] = "string";
+  tipo_opr["char+string"]   = "string";
+  tipo_opr["string+char"]   = "string";
+  tipo_opr["char+char"]     = "string";
  
-  // Resultados para o operador "*"
-  tipo_opr["i*i"] = "i";
-  tipo_opr["i*d"] = "d";
-  tipo_opr["d*i"] = "d";
-  tipo_opr["d*d"] = "d";
-
-  // Tipos da linguagem para os tipos internos do compilador
-  tipo_tipo_c["numero"] = "i";
-  tipo_tipo_c["numeroComVirgula"] = "d";
-  tipo_tipo_c["letra"] = "c";
-  tipo_tipo_c["palavra"] = "s";
-
-  // Tipos internos do compilador para os tipos do C
-  tipo_tipo_c["i"] = "int";
-  tipo_tipo_c["d"] = "double";
-  tipo_tipo_c["c"] = "char";
-  tipo_tipo_c["s"] = "string";
-
-
-
+ // Resultados para o operador "-"
+  tipo_opr["int-int"]       = "int";
+  tipo_opr["int-double"]    = "double";
+  tipo_opr["double-int"]    = "double";
+  tipo_opr["double-double"] = "double";
   
+  // Resultados para o operador "*"
+  tipo_opr["int*int"]       = "int";
+  tipo_opr["int*double"]    = "double";
+  tipo_opr["double*int"]    = "double";
+  tipo_opr["double*double"] = "double";
+  
+  // Resultados para o operador "/"
+  tipo_opr["int/int"]       = "double";
+  tipo_opr["int/double"]    = "double";
+  tipo_opr["double/int"]    = "double";
+  tipo_opr["double/double"] = "double";
+  
+  // Resultados para o operador "<"
+  tipo_opr["int<int"]       = "int";
+  tipo_opr["int<double"]    = "int";
+  tipo_opr["double<int"]    = "int";
+  tipo_opr["double<double"] = "int";
+  tipo_opr["char<char"]     = "int";
+  tipo_opr["int<char"]      = "int";
+  tipo_opr["char<int"]      = "int";
+
+  // Resultados para o operador ">"
+  tipo_opr["int>int"]       = "int";
+  tipo_opr["int>double"]    = "int";
+  tipo_opr["double>int"]    = "int";
+  tipo_opr["double>double"] = "int";
+  tipo_opr["char>char"]     = "int";
+  tipo_opr["int>char"]      = "int";
+  tipo_opr["char>int"]      = "int";
 }
 
 string consulta_ts( string nome_var ) {
-  // fake. Deveria ser ts[nome_var], onde ts é um map.
-  // Antes de retornar, tem que verificar se a variável existe.
-  return "i";
+  string result = tabela_simbolos[nome_var].t;
+
+  if(result == "")
+    yyerror("A variável não foi declarada no escopo do programa");
+
+  return tabela_simbolos[nome_var].t;
+}
+
+void inserir_ts( string nome_var , TipoGeral tipo) {
+  tabela_simbolos[nome_var] = tipo;
 }
 
 string gera_nome_var_temp( string tipo ) {
   static int n = 0;
   char buff[100];
-  
-  sprintf( buff, "_%d", ++n ); 
-
+  sprintf( buff, "_%d", ++n );
   return "t" + tipo + buff; 
+}
+
+Atributos cria_variavel(string tipo, vector<string> lista, int dim, int s1, int s2){
+  Atributos result = Atributos();
+  vector<string>::iterator it;
+  for( it = lista.begin(); it != lista.end(); it++){
+    if( dim == 0){
+     result.c = result.c + tipo + " " + *it  + ";\n";
+     inserir_ts(*it,TipoGeral(tipo));
+    }else if( dim == 1){
+     result.c = result.c + tipo + " " + *it + "["+toString(s1)+"]" + ";\n";
+     inserir_ts(*it,TipoGeral(tipo,s1));
+    }else if( dim == 2){
+      result.c = result.c + tipo + " " + *it + "["+toString(s1)+"]" + "["+toString(s2)+"]" + ";\n";
+      inserir_ts(*it,TipoGeral(tipo, s1,s2));
+    }
+  }
+  return result;
 }
 
 string gera_saida_dados(string saida){
     return "cout << " + saida + " << endl;";
 }
 
-void gera_expressao_opr(Atributos* result, Atributos s1, Atributos s2, string opr){
-      result->t = tipo_opr[ s1.t + opr + s2.t ]; 
-      result->v = gera_nome_var_temp(result->t);
+Atributos gera_codigo_opr(Atributos s1, string opr, Atributos s2){
+  Atributos result;
+  result.t = tipo_opr[ s1.t + opr + s2.t ]; 
+  result.v = gera_nome_var_temp(result.t);
 
-      result->var_temp = s1.var_temp + s2.var_temp + 
-        tipo_tipo_c[result->t] + " " + result->v + ";\n";
-      // Codigo das expressões dos filhos da arvore.
-      result->c = s1.c + s2.c + "  " + 
-                 result->v + " = " + 
-                 s1.v + opr + s2.v + ";\n";       
+  result.var_temp = s1.var_temp + s2.var_temp + "  " + result.t + " " + result.v + ";\n";
+  
+  result.c = s1.c + s2.c + "  " + 
+             result.v + " = " + s1.v + opr + s2.v + ";\n";       
+  return result;
+}
+
+string toString(int n){
+  char buff[100];
+  sprintf(buff,"%d",n);
+  return buff;
+}
+
+int toInt(string valor){
+  int aux = -1;
+  if( sscanf(valor.c_str(), "%d", &aux) != 1 )
+    error("Número Inválido: " + valor);
+  
+  return aux;
 }
 
 int main( int argc, char* argv[] )
