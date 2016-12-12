@@ -1,20 +1,37 @@
 
 variaveis
 	numero a,b;
-	palavra teste;
+    palavra teste;
+    numeroComVirgula[10] vetor; 
+    numero[10][20] vetor2; 
 
-	numero[10] vetor;
-
+    (* numero vetor; *)
+    (*  Testando os comentários *)
 	numeroComVirgula deste;
-
-	simounão bonito;
-
+	simounão bonito; 
 
 
-tente começar devolve numero 
-,tranquilo? 
-	a = 2;
- 	vetor[a*a+1] = 10;
-	escreveAi(vetor[2*a+1]);
+tente começar devolve numero ,tranquilo? 
+(*	a = 2; *)
+(* 	vetor[a*a+1] = 3.0; *)
+(* 	vetor2[2][1] = 5; *)
+(*	escreveAi(vetor2[2][1]);*)
+(*    enquanto a =  0vai ate 19 faça ,tranquilo? *)
+(*		vetor2[1][a] = a;*)
+(* 	favoravel; *)
+(*    enquanto a = 0 vai ate 19 faça ,tranquilo? *)
+(*		escreveAi(vetor2[1][a]);*)
+(* 	favoravel;  *)
+(*	a = 0; *)
+(*	enquanto ( 5 > a) faça ,tranquilo? *)
+(*		escreveAi(a); *)
+(*		a = a + 1; *)
+(*	favoravel; *)
+	a = 0;
+	faça ,tranquilo?
+		escreveAi('Professor Z');
+		a = a + 1;
+	favoravel enquanto(a < 2);
+ 	
 favoravel
 

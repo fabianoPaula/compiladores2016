@@ -44,6 +44,16 @@ COMMENT "(*"([^*]|"*"[^)])*"*)"
 "verdade"          { yylval = Atributos( yytext, "b" ); return TK_MENTIRA; }
 "mentira"          { yylval = Atributos( yytext, "b" ); return TK_VERDADE; }
 
+"se"               { yylval = Atributos( yytext); return TK_SE; }
+"faz"              { yylval = Atributos( yytext); return TK_FAZ; }
+"senao"            { yylval = Atributos( yytext); return TK_ESQUECE; }
+
+"enquanto"		   { yylval = Atributos( yytext); return TK_ENQUANTO; }
+"para"		       { yylval = Atributos( yytext); return TK_PARA; }
+"vai"		       { yylval = Atributos( yytext); return TK_VAI; }
+"ate"		       { yylval = Atributos( yytext); return TK_ATE; }
+"faça"		       { yylval = Atributos( yytext); return TK_FACA; }
+
 "e"                { yylval = Atributos( yytext ); return TK_E;  }
 "&&"               { yylval = Atributos( yytext ); return TK_E;  }
 "ou"               { yylval = Atributos( yytext ); return TK_OU; }
