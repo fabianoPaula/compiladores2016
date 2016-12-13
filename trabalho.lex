@@ -4,10 +4,10 @@
 
 DELIM   [\t ]
 LINHA   [\n]
-NUMERO  [0-9]
+NUMERO  (-)?[0-9]
 LETRA   [A-Za-z_]
 INT     {NUMERO}+
-DOUBLE  {NUMERO}+("."{NUMERO}+)?
+DOUBLE  (-)?{NUMERO}+("."{NUMERO}+)?
 ID      {LETRA}({LETRA}|{NUMERO})*
 CSTRING "'"([^\n']|"''")*"'"
 
@@ -46,13 +46,22 @@ COMMENT "(*"([^*]|"*"[^)])*"*)"
 
 "se"               { yylval = Atributos( yytext); return TK_SE; }
 "faz"              { yylval = Atributos( yytext); return TK_FAZ; }
-"senao"            { yylval = Atributos( yytext); return TK_ESQUECE; }
+"senao"            { yylval = Atributos( yytext); return TK_SENAO; }
 
 "enquanto"		   { yylval = Atributos( yytext); return TK_ENQUANTO; }
 "para"		       { yylval = Atributos( yytext); return TK_PARA; }
 "vai"		       { yylval = Atributos( yytext); return TK_VAI; }
 "ate"		       { yylval = Atributos( yytext); return TK_ATE; }
 "faça"		       { yylval = Atributos( yytext); return TK_FACA; }
+
+[Ee][Ss][Cc][Oo][Ll][Hh][Ee] { yylval = Atributos( yytext); return TK_ESCOLHE; }
+[Ee][Nn][Tt][Rr][Ee]         { yylval = Atributos( yytext); return TK_ENTRE; }
+[Cc][Aa][Ss][Oo]             { yylval = Atributos( yytext); return TK_CASO; }
+[Pp][Aa][Dd][Rr][Aa][Oo]     { yylval = Atributos( yytext); return TK_PADRAO; }
+
+[Bb][Ee][Ll][Ee][Zz][Aa]     { yylval = Atributos( yytext); return TK_BELEZA; }
+[Vv][Ll][Ww]                 { yylval = Atributos( yytext); return TK_VLW; }
+
 
 "e"                { yylval = Atributos( yytext ); return TK_E;  }
 "&&"               { yylval = Atributos( yytext ); return TK_E;  }

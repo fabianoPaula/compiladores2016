@@ -11,64 +11,80 @@ using namespace std;
 int yylex();
 void yyerror( const char* st );
 
-struct Atributos {
-  string v, t, c; // Valor, tipo e código gerado.
-  vector<string> lista; // Uma lista auxiliar.
-
-  string var_temp; // Variaveis temporárias criadas
-  
-  Atributos() { // Constutor vazio
-    v = "";
-    t = "";
-    c = "";
-    var_temp = "";
-  } 
-
-  Atributos( string valor ) {
-    v = valor;
-    t = "";
-    c = "";
-    var_temp = "";
-  }
-
-  Atributos( string valor, string tipo ) {
-    v = valor;
-    t = tipo;
-    c = "";
-    var_temp = "";
-  }
-};
-
-
 #define MAX_DIM 2
 struct TipoGeral{
-  string t;
+  string tipo_base;
   int ndim;
   int tam[MAX_DIM];
 
-  TipoGeral() {} // Constutor Vazio
+  TipoGeral() {
+    tipo_base = "";
+    ndim = 0;
+    tam[0] = -1;
+    tam[1] = -1;
+  } 
 
   TipoGeral(string tipo) {
-    t = tipo;
+    tipo_base = tipo;
     ndim = 0;
     tam[0] = -1;
     tam[1] = -1;
   }
 
   TipoGeral(string tipo, int v1) {
-    t = tipo;
+    tipo_base = tipo;
     ndim = 1;
     tam[0] = v1;
     tam[1] = -1;
   }
 
   TipoGeral(string tipo, int v1, int v2) {
-    t = tipo;
+    tipo_base = tipo;
     ndim = 2;
     tam[0] = v1;
     tam[1] = v2;
   }
 };
+
+struct Atributos {
+  string v, c; // Valor, tipo e código gerado.
+  TipoGeral t;
+  vector<string> lista; // Uma lista auxiliar.
+
+  string var_temp; // Variaveis temporárias criadas
+  
+  Atributos() { // Constutor vazio
+    v = "";
+    t = TipoGeral();
+    c = "";
+    var_temp = "";
+  } 
+
+  Atributos( string valor ) {
+    v = valor;
+    t = TipoGeral();
+    c = "";
+    var_temp = "";
+  }
+
+  Atributos( string valor, string tipo ) {
+    v = valor;
+    t = TipoGeral(tipo);
+    c = "";
+    var_temp = "";
+  }
+};
+
+
+struct EstruturaSwitch{
+  string v_exp;
+  string label_exit;
+};
+
+
+// Variávei axiliares aos comando switch
+EstruturaSwitch auxSwitch;
+int label_swicth_flag = 0;
 
 map< string, string > tipo_opr;
 
@@ -83,7 +99,8 @@ map<string,TipoGeral> tabela_simbolos;
 TipoGeral consulta_ts( string nome_var );
 void inserir_ts( string nome_var, TipoGeral tipo);
 
-Atributos cria_variavel(string tipo, vector<string> lista, int dim, int s1, int s2);
+string declara_variavel( string nome, TipoGeral tipo );
+Atributos cria_variavel(vector<string> lista, TipoGeral tipo);
 
 // Código que geram novos símbolos, nomes para a forma intermediária
 string gera_nome_var_temp( string tipo );
@@ -91,13 +108,21 @@ string gera_label(string tipo);
 
 void testa_tipoVariavel(Atributos s1, Atributos s2);
 
+// Função auxilixar para o comando fechamento_switch
+string last_label_swicth();
+
 // Funções que geram código para a forma intermediária
 Atributos gera_codigo_opr(Atributos s1, string opr, Atributos s2);
 
-Atributos gera_codigo_teste_vetor(string nome_var, Atributos s1,Atributos s2);
-Atributos gera_codigo_teste_matrix(string nome_var, Atributos s1,Atributos s2,Atributos s3);
+Atributos gera_codigo_teste_vetor(Atributos s1,Atributos s2);
+Atributos gera_codigo_teste_matrix(Atributos s1,Atributos s2,Atributos s3);
 
 Atributos gera_codigo_if( Atributos expr, string cmd_then, string cmd_else );
+
+Atributos gera_codigo_atrib(Atributos esquerda, Atributos direita);
+
+Atributos gera_codigo_writeln(Atributos expr);
+Atributos gera_codigo_readln(Atributos expr, Atributos variavel_leitura);
 
 
 
@@ -137,12 +162,18 @@ string includes =
 %token TK_ESCREVEAI TK_LEISSOAI
 
 // Comando de selecão
-%token TK_SE TK_FAZ TK_ESQUECE
+%token TK_SE TK_FAZ TK_SENAO
 
 // Comando de Repetição
 
-// for
+// for, while, do_while
 %token TK_ENQUANTO TK_VAI TK_PARA TK_ATE TK_FACA
+
+// Comando de escolha
+%token TK_CASO TK_ESCOLHE TK_ENTRE TK_VLW TK_PADRAO
+
+// Comando Break
+%token TK_BELEZA
 
 // Tipos de valores
 %token TK_ID TK_CINT TK_CDOUBLE TK_ATRIB TK_CSTRING
@@ -169,9 +200,13 @@ S : DECLS COMECA
 
 /* Declaração de variáveis e funções */
     
-DECLS : BLOCO_VARS DECLS { $$.c = $1.c + $2.c;  }
+DECLS : DECL DECLS { $$.c = $1.c + $2.c;  }
       | { $$.c = ""; }
       ;  
+
+DECL : BLOCO_VARS
+     
+     ;
 
 BLOCO_VARS : TK_VARIAVEIS VARS { $$.c = $2.c; }
            ;
@@ -181,9 +216,9 @@ VARS : VAR ';' VARS { $$.c = $1.c + $3.c; }
      | { $$.c = ""; }
      ;     
      
-VAR : TIPO_VAR IDS                 { $$ = cria_variavel($1.t, $2.lista, 0, -1,-1); }
-    | TIPO_VAR '[' TK_CINT ']' IDS { $$ = cria_variavel($1.t, $5.lista, 1, toInt($3.v),-1); }
-    | TIPO_VAR '[' TK_CINT ']' '[' TK_CINT ']' IDS { $$ = cria_variavel($1.t, $8.lista, 2, toInt($3.v),toInt($6.v)); }
+VAR : TIPO_VAR IDS                                 { $$ = cria_variavel($2.lista, TipoGeral($1.t ) ); }
+    | TIPO_VAR '[' TK_CINT ']' IDS                 { $$ = cria_variavel($5.lista, TipoGeral($1.t.tipo_base,toInt($3.v)) ); }
+    | TIPO_VAR '[' TK_CINT ']' '[' TK_CINT ']' IDS { $$ = cria_variavel($8.lista, TipoGeral($1.t.tipo_base,toInt($3.v),toInt($6.v))); }
     ;
 
 TIPO_VAR : TK_TIPO_NUMERO             { $$ = $1; }
@@ -206,7 +241,7 @@ COMECA : PARAMS TK_COMECAR TK_DEVOLVE TIPO_VAR BLOCO_VARS BLOCO
           }
        | PARAMS TK_COMECAR TK_DEVOLVE TIPO_VAR BLOCO 
           { 
-            $$.c = "int main(){ \n" + $5.var_temp + $5.c + "l_exit:;\n  return 0;\n}"; 
+            $$.c = "int main(){ \n" + $5.var_temp + $5.c + "}"; 
           }  
        ;
 
@@ -230,13 +265,90 @@ CMD : WRITELN
     | CMD_FOR 
     | CMD_WHILE
     | CMD_DO_WHILE
+    | CMD_SWICTH
+    | CMD_IF
     ; 
+
+CMD_IF : TK_SE E TK_FAZ CMD
+         { 
+           testa_tipoVariavel($2,Atributos("","b"));
+           $$ = gera_codigo_if( $2, $4.c, "" ); 
+           $$.var_temp = $2.var_temp + $4.var_temp; 
+         }  
+       | TK_SE E TK_FAZ CMD TK_SENAO CMD 
+          { 
+            testa_tipoVariavel($2,Atributos("","b"));
+            $$ = gera_codigo_if( $2, $4.c, $6.c ); 
+            $$.var_temp = $2.var_temp + $4.var_temp + $6.var_temp; 
+          }  
+       ;
+
+CMD_SWICTH : TK_ESCOLHE E { auxSwitch.label_exit = last_label_swicth(); auxSwitch.v_exp = $2.v; } TK_ENTRE CASES PADRAO TK_VLW 
+              {  
+                $$.var_temp = $2.var_temp + $5.var_temp + $6.var_temp;
+                $$.c = $2.c + $5.c + $6.c + auxSwitch.label_exit + ":;\n";
+              }
+           ;
+
+CASES : CASE CASES {  
+                      $$.var_temp = $1.var_temp + $2.var_temp;
+                      $$.c = $1.c + $2.c;
+                   }
+      | { }
+      ; 
+
+CASE : TK_CASO E ':' CMDS {  
+                            string label_teste = gera_label( "teste_case" );
+                            string label_fim = gera_label( "fim_case" );
+                            string condicao = gera_nome_var_temp( "b" );
+
+                            $$.var_temp = $2.var_temp + $4.var_temp;
+                            $$.c = $2.c + 
+                                    "  "+ condicao + " = " + auxSwitch.v_exp + " == " + $2.v +";\n"+
+                                    "  "+ condicao + " = !" + condicao +";\n"+
+                                    "  if(" + condicao + ") goto "+ label_fim + ";\n"
+                                    + $4.c +
+                                    label_fim+ ":;\n";
+                            $$.var_temp = $2.var_temp + $4.var_temp + declara_variavel(condicao, TipoGeral("b"));
+                          }
+     | TK_CASO E ':' CMDS BELEZA {  
+                                  string label_teste = gera_label( "teste_case" );
+                                  string label_fim = gera_label( "fim_case" );
+                                  string condicao = gera_nome_var_temp( "b" );
+
+                                  $$.var_temp = $2.var_temp + $4.var_temp;
+                                  $$.c = $2.c + 
+                                          "  "+ condicao + " = " + auxSwitch.v_exp + " == " + $2.v +";\n"+
+                                          "  "+ condicao + " = !" + condicao +";\n"+
+                                          "  if(" + condicao + ") goto "+ label_fim + ";\n"
+                                          + $4.c +
+                                          "  goto " + auxSwitch.label_exit + ";\n" +
+                                          label_fim+ ":;\n";
+                                  $$.var_temp = $2.var_temp + $4.var_temp + declara_variavel(condicao, TipoGeral("b"));                                    
+                                }
+     ;
+
+PADRAO : TK_PADRAO ':' CMDS {  
+                            string label_fim = gera_label( "fim_case_padrao" );
+                            $$.var_temp = $2.var_temp + $3.var_temp;
+                            $$.c = $2.c + $3.c + label_fim+ ":;\n";
+                            $$.var_temp = $2.var_temp + $3.var_temp;
+                          }
+     | TK_PADRAO ':' CMDS BELEZA {  
+                                  string label_fim = gera_label( "fim_case_padrao" );
+                                  $$.var_temp = $2.var_temp + $3.var_temp;
+                                  $$.c = $2.c + $3.c + "  goto " + auxSwitch.label_exit + ";\n" + label_fim+ ":;\n";
+                                  $$.var_temp = $2.var_temp + $4.var_temp;
+                                }
+     |
+     ;
+
+BELEZA : TK_BELEZA ';'
+       ;
 
 CMD_WHILE : TK_ENQUANTO E TK_FACA CMD 
             {
-              Atributos ss;
-              ss.t = "b";
-              testa_tipoVariavel($2,ss);
+              testa_tipoVariavel($2,Atributos("","b"));
 
               string label_teste = gera_label( "teste_while" );
               string label_fim = gera_label( "fim_while" );
@@ -250,15 +362,13 @@ CMD_WHILE : TK_ENQUANTO E TK_FACA CMD
                       "  goto " + label_teste + ";\n" +
                       label_fim + ":;\n";  
 
-              $$.var_temp = $4.var_temp + $2.var_temp + "  " + tipos["b"]  + " " + condicao + ";\n";
+              $$.var_temp = $4.var_temp + $2.var_temp + declara_variavel(condicao, TipoGeral("b"));
             }
           ;
 
 CMD_DO_WHILE : TK_FACA BLOCO TK_ENQUANTO E  
             {
-              Atributos ss;
-              ss.t = "b";
-              testa_tipoVariavel($4,ss);
+              testa_tipoVariavel($4,Atributos("","b"));
 
               string label_inicio = gera_label( "inicio_do_while" );
               string condicao = gera_nome_var_temp( "b" );
@@ -269,20 +379,19 @@ CMD_DO_WHILE : TK_FACA BLOCO TK_ENQUANTO E
                       "  " +condicao+" = " + $4.v + ";\n" + 
                       "  " + "if( " + condicao + " ) goto " + label_inicio + ";\n";  
 
-              $$.var_temp = $4.var_temp + $2.var_temp + "  " + tipos["b"]  + " " + condicao + ";\n";
+              $$.var_temp = $4.var_temp + $2.var_temp + declara_variavel(condicao, TipoGeral("b"));
             }
           ;
 
 
 CMD_FOR : TK_ENQUANTO NOME_VAR TK_ATRIB E TK_VAI TK_ATE E TK_FACA CMD 
           { 
-            Atributos ss;
-            ss.t = "i";
+            Atributos ss("","i");
             testa_tipoVariavel($2,ss);
             testa_tipoVariavel($4,ss);
             testa_tipoVariavel($7,ss);
 
-            string var_fim = gera_nome_var_temp( $2.t);
+            string var_fim = gera_nome_var_temp( $2.t.tipo_base);
             string label_teste = gera_label( "teste_for" );
             string label_fim = gera_label( "fim_for" );
             string condicao = gera_nome_var_temp( "b" );
@@ -291,44 +400,26 @@ CMD_FOR : TK_ENQUANTO NOME_VAR TK_ATRIB E TK_VAI TK_ATE E TK_FACA CMD
                     "  " + $2.v + " = " + $4.v + ";\n" +
                     "  " + var_fim + " = " + $7.v + ";\n" +
                     label_teste + ":;\n" +
-                    "  " +condicao+" = "+$2.v + " > " + var_fim + ";\n" + 
-                    "  " + "if( " + condicao + " ) goto " + label_fim + 
-                    ";\n" +
+                    "  " +condicao+" = "+$2.v + " < " + var_fim + ";\n" + 
+                    "  " +condicao+" = !"+condicao+ ";\n" + 
+                    "  " + "if( " + condicao + " ) goto " + label_fim + ";\n" +
                     $9.c +
                     "  " + $2.v + " = " + $2.v + " + 1;\n" +
                     "  goto " + label_teste + ";\n" +
                     label_fim + ":;\n";  
             $$.var_temp = $4.var_temp + $7.var_temp + $9.var_temp + 
-                          "  " + tipos[$2.t] + " " + var_fim + ";\n" + 
-                          "  " + tipos["b"]  + " " + condicao + ";\n";
+                           declara_variavel(var_fim, $2.t) + 
+                           declara_variavel(condicao,TipoGeral("b"));
           }
         ;
 
-READLN : TK_LEISSOAI '(' E ',' NOME_VAR ')'
-          {  
-            $$.c = $3.c + "  cout << " + $3.v + ";\n  cout << endl;\n"
-                        + "  cin  >> " + $5.v + ";\n";
-            $$.var_temp = $3.var_temp;
-          }
+READLN : TK_LEISSOAI '(' E ',' F ')' { $$ =  gera_codigo_readln($3,$5); }
         ;
 
-WRITELN : TK_ESCREVEAI '(' E ')'
-          {  
-            $$.c = $3.c + "  cout << " + $3.v + ";\n  cout << endl;\n";
-            $$.var_temp = $3.var_temp;
-          }
+WRITELN : TK_ESCREVEAI '(' E ')' { $$ =  gera_codigo_writeln($3); }
         ;
   
-ATRIB : F TK_ATRIB E 
-        { 
-//          if( $1.t.compare($3.t) != 0){
-//            error("Atribuição com tipos errados errados! "+ $1.t +" <- "+ $3.t);
-//          }
-          testa_tipoVariavel($1,$3);
-
-          $$.c = $1.c + $3.c+ "  " + $1.v + " = " + $3.v + ";\n"; 
-          $$.var_temp = $1.var_temp + $3.var_temp;
-        } 
+ATRIB : F TK_ATRIB E { $$ = gera_codigo_atrib($1,$3); } 
       ;   
 
 E : E '+' E      { $$ = gera_codigo_opr( $1, "+" , $3 ); }
@@ -349,16 +440,16 @@ E : E '+' E      { $$ = gera_codigo_opr( $1, "+" , $3 ); }
   ;
   
 F : NOME_VAR           { $$ = $1; }
-  | NOME_VAR '[' E ']' { $$ = gera_codigo_teste_vetor($1.v,$1,$3); }
-  | NOME_VAR '[' E ']' '[' E ']'{ $$ = gera_codigo_teste_matrix($1.v,$1,$3,$6); }
-  | TK_CINT    { $$.v = $1.v; $$.t = "i"; $$.c = $1.c; }
-  | TK_CDOUBLE { $$.v = $1.v; $$.t = "d"; $$.c = $1.c; }
-  | TK_CSTRING { $$.v = $1.v; $$.t = "s"; $$.c = $1.c; }
-  | TK_VERDADE { $$.v = $1.v; $$.t = "b"; $$.c = $1.c; }
-  | TK_MENTIRA { $$.v = $1.v; $$.t = "b"; $$.c = $1.c; }
+  | NOME_VAR '[' E ']' { $$ = gera_codigo_teste_vetor($1,$3); }
+  | NOME_VAR '[' E ']' '[' E ']'{ $$ = gera_codigo_teste_matrix($1,$3,$6); }
+  | TK_CINT    { $$.v = $1.v; $$.t = TipoGeral("i"); $$.c = $1.c; }
+  | TK_CDOUBLE { $$.v = $1.v; $$.t = TipoGeral("d"); $$.c = $1.c; }
+  | TK_CSTRING { $$.v = $1.v; $$.t = TipoGeral("s"); $$.c = $1.c; }
+  | TK_VERDADE { $$.v = $1.v; $$.t = TipoGeral("b"); $$.c = $1.c; }
+  | TK_MENTIRA { $$.v = $1.v; $$.t = TipoGeral("b"); $$.c = $1.c; }
   ;
 
-NOME_VAR : TK_ID { $$.v = $1.v; $$.t = consulta_ts( $1.v ).t; $$.c = $1.c; }
+NOME_VAR : TK_ID { $$.v = $1.v; $$.t = consulta_ts( $1.v ); $$.c = $1.c; }
          ; 
   
 %%
@@ -368,9 +459,13 @@ int nlinha = 1;
 
 int yyparse();
 
+string TipoGeralToString(TipoGeral tipo){
+  return tipo.tipo_base + '(' + toString(tipo.ndim) + ',' + toString(tipo.tam[0]) + ',' + toString(tipo.tam[1]) + ')';
+}
+
 void debug( string producao, Atributos atr ) {
   cerr << "Debug: " << producao << endl;
-  cerr << "  t: " << atr.t << endl;
+  cerr << "  t: " << TipoGeralToString(atr.t) << endl;
   cerr << "  v: " << atr.v << endl;
   cerr << "  c: " << atr.c << endl;
   cerr << "  temp: " << atr.var_temp << endl;
@@ -429,6 +524,7 @@ void preload() {
   tipo_opr["c<c"] = "b";
   tipo_opr["i<c"] = "b";
   tipo_opr["c<i"] = "b";
+  tipo_opr["s<s"] = "b";
 
   // Resultados para o operador ">"
   tipo_opr["i>i"] = "b";
@@ -438,6 +534,7 @@ void preload() {
   tipo_opr["c>c"] = "b";
   tipo_opr["i>c"] = "b";
   tipo_opr["c>i"] = "b";
+  tipo_opr["s>s"] = "b";
 
     // Resultados para o operador "<="
   tipo_opr["i<=i"] = "b";
@@ -447,6 +544,7 @@ void preload() {
   tipo_opr["c<=c"] = "b";
   tipo_opr["i<=c"] = "b";
   tipo_opr["c<=i"] = "b";
+  tipo_opr["s<=s"] = "b";
 
   // Resultados para o operador ">="
   tipo_opr["i>=i"] = "b";
@@ -456,6 +554,7 @@ void preload() {
   tipo_opr["c>=c"] = "b";
   tipo_opr["i>=c"] = "b";
   tipo_opr["c>=i"] = "b";
+  tipo_opr["s>=s"] = "b";
 
   // Resultados para o operador "!="
   tipo_opr["i!=i"] = "b";
@@ -465,6 +564,7 @@ void preload() {
   tipo_opr["c!=c"] = "b";
   tipo_opr["i!=c"] = "b";
   tipo_opr["c!=i"] = "b";
+  tipo_opr["s!=s"] = "b";
 
   // Resultados para o operador "&&"
   tipo_opr["b&&b"] = "b";
@@ -475,12 +575,27 @@ void preload() {
   tipos["i"] = "int";
   tipos["d"] = "double";
   tipos["c"] = "char";
-  tipos["s"] = "string";
+  tipos["s"] = "char";
   tipos["b"] = "int";
 }
 
 int existe_ts(string nome_var){
   return (tabela_simbolos.find(nome_var) != tabela_simbolos.end());
+}
+
+string last_label_swicth(){
+  static string result;
+
+  if (!label_swicth_flag){
+      result = gera_label("fechamento_switch");
+      label_swicth_flag = 1;
+  }
+ 
+  return result;
+}
+
+void close_switch(){
+  label_swicth_flag = 0;
 }
 
 TipoGeral consulta_ts( string nome_var ) {
@@ -508,8 +623,10 @@ string gera_nome_var_temp( string tipo ) {
 }
 
 void testa_tipoVariavel(Atributos s1, Atributos s2){
-  if( s1.t.compare(s2.t) != 0){
-    error("Atribuição com tipos errados errados! "+ s1.t +" <- "+ s2.t);
+  if( s1.t.tipo_base.compare(s2.t.tipo_base) != 0){
+    debug("TIPO ERRADO",s1);
+    debug("TIPO ERRADO",s2);
+    error("Atribuição com tipos errados errados! "+ s1.t.tipo_base +" <- "+ s2.t.tipo_base);
   }  
 }
 
@@ -519,7 +636,30 @@ string gera_label( string tipo ) {
   return nome;
 }
 
-Atributos cria_variavel(string tipo, vector<string> lista, int dim, int s1, int s2){
+string declara_variavel( string nome, TipoGeral tipo ) {
+  if( tipos[ tipo.tipo_base ] == "" ) 
+    error( "Tipo inválido: " + tipo.tipo_base );
+    
+  string indice;
+   
+  switch( tipo.ndim ) {
+    case 0: indice = (tipo.tipo_base == "s" ? "[256]" : "");
+            break;
+              
+    case 1: indice = "[" +toString(tipo.tam[0]*(tipo.tipo_base == "s" ? 256 : 1)) + "]";
+            break; 
+            
+    case 2: indice = "[" +toString(tipo.tam[0]*tipo.tam[1]*(tipo.tipo_base == "s" ? 256 : 1)) + "]";
+            break;
+    
+    default:
+       error( "Bug muito sério..." );
+  } 
+  
+  return "  " + tipos[ tipo.tipo_base ] + "  "+ nome + indice + ";\n";
+}
+
+Atributos cria_variavel(vector<string> lista, TipoGeral tipo){
   Atributos result = Atributos();
   vector<string>::iterator it;
   for( it = lista.begin(); it != lista.end(); it++){
@@ -528,16 +668,8 @@ Atributos cria_variavel(string tipo, vector<string> lista, int dim, int s1, int 
       error("A variável já foi declarada no programa!");
     }
 
-    if( dim == 0){
-     result.c = result.c + tipos[tipo] + " " + *it  + ";\n";
-     inserir_ts(*it,TipoGeral(tipo));
-    }else if( dim == 1){
-     result.c = result.c + tipos[tipo] + " " + *it + "["+toString(s1)+"]" + ";\n";
-     inserir_ts(*it,TipoGeral(tipo,s1));
-    }else if( dim == 2){
-      result.c = result.c + tipos[tipo] + " " + *it + "["+toString(s1)+"]" + "["+toString(s2)+"]" + ";\n";
-      inserir_ts(*it,TipoGeral(tipo, s1,s2));
-    }
+    result.c += declara_variavel(*it,tipo);
+    inserir_ts(*it,tipo);
   }
   return result;
 }
@@ -548,85 +680,86 @@ string gera_saida_dados(string saida){
 
 Atributos gera_codigo_opr(Atributos s1, string opr, Atributos s2){
   Atributos result;
-  string typeOfOpr =  s1.t + opr + s2.t;
-  result.t = tipo_opr[typeOfOpr]; 
-  result.v = gera_nome_var_temp(result.t);
-  result.var_temp = s1.var_temp + s2.var_temp + "  " + tipos[result.t] + " " + result.v + ";\n";
+  string typeOfOpr =  s1.t.tipo_base + opr + s2.t.tipo_base;
+
+  result.t = TipoGeral(tipo_opr[typeOfOpr]); 
+  result.v = gera_nome_var_temp(result.t.tipo_base);
+  result.var_temp = s1.var_temp + s2.var_temp + declara_variavel(result.v, TipoGeral(result.t) );
 
   if( typeOfOpr.compare("s+s") != 0){
     result.c = s1.c + s2.c + "  " + result.v + " = " + s1.v + opr + s2.v + ";\n";
   }else{
-    result.c = s1.c + s2.c + "  " + result.v + " = " + s1.v + opr + s2.v + ";\n";    
+    result.c = s1.c + s2.c +    
+      "  strncpy( " + result.v + ", " + s1.v + ", 256 );\n" +
+      "  strncat( " + result.v + ", " + s2.v + ", 256 );\n";
   }
   
   return result;
 }
 
-Atributos gera_codigo_teste_vetor(string nome_var, Atributos s1,Atributos s2) {
+Atributos gera_codigo_teste_vetor(Atributos nome_vetor,Atributos indice) {
   Atributos ss;
-  TipoGeral aux = consulta_ts(nome_var);
-
-  string label_else = gera_label( "erro_array_"+nome_var );
-  string label_end = gera_label( "saida" );
+  TipoGeral aux = consulta_ts(nome_vetor.v);
+  
+  string label_else = gera_label( "erro_array_"+nome_vetor.v );
+  string label_end = gera_label( "saida_vetor" );
   string variavel_teste =  gera_nome_var_temp("i");
-
   
-  
-  ss.c = s2.c + 
-         // "  " + s2.v + " = !" + s2.v + ";\n\n" +
-         "  " + variavel_teste + " = " + s2.v + " < "+ toString(aux.tam[0]) + ";\n"+
+  ss.c = indice.c + 
+         "  " + variavel_teste + " = " + indice.v + " < "+ toString(aux.tam[0]) + ";\n"+
          "  " + variavel_teste + " = !" + variavel_teste + ";\n"+
          "  if( "+ variavel_teste +") goto " + label_else + ";\n" +
          "  goto "+label_end+"; \n" + 
          label_else + ":;\n" +
-         "  cout << \"Excedeu tamanho do vetor! \";\n" +
-         "  cout << \"" + nome_var + "[\";\n"+
-         "  cout << " +  s2.v + ";\n" + 
-         "  cout << \"]\\n\";\n"+
-         "  goto l_exit;\n" +
-         label_end + ":;\n"; 
+         "  cerr << \"Excedeu tamanho do vetor! \";\n" +
+         "  cerr << \"" + nome_vetor.v + "[\";\n"+
+         "  cerr << " +  indice.v + ";\n" + 
+         "  cerr << \"]\\n\";\n"+
+         "  exit(1);\n" +
+         label_end + ":;\n";
 
-  ss.v = s1.v + '[' + s2.v + ']';
-  ss.t = s1.t; 
-  ss.var_temp = s2.var_temp + "  " + tipos["i"] + " " + variavel_teste + ";\n"; 
+  ss.v = nome_vetor.v + '[' + indice.v + "]";
+  ss.t = aux; 
+  ss.var_temp = indice.var_temp + declara_variavel(variavel_teste,TipoGeral("i")); 
          
   return ss;       
 }
 
-Atributos gera_codigo_teste_matrix(string nome_var, Atributos s1,Atributos s2, Atributos s3) {
+Atributos gera_codigo_teste_matrix( Atributos nome_vetor,Atributos indice1, Atributos indice2) {
   Atributos ss;
-  TipoGeral aux = consulta_ts(nome_var);
+  TipoGeral aux = consulta_ts(nome_vetor.v);
 
-  string label_else = gera_label( "erro_array_"+nome_var );
-  string label_end = gera_label( "saida" );
+  string label_else = gera_label( "erro_array_"+nome_vetor.v );
+  string label_end = gera_label( "saida_matrix" );
   string variavel_teste =  gera_nome_var_temp("i");
 
   // Testa a dimensão 1 da matriz
-  // Testa a dimensão 1 da matriz
+  // Testa a dimensão 2 da matriz
   
-  ss.c = s2.c + 
-         // "  " + s2.v + " = !" + s2.v + ";\n\n" +
-         "  " + variavel_teste + " = " + s2.v + " < "+ toString(aux.tam[0]) + ";\n"+
+  ss.c = indice1.c + indice2.c +
+         "  " + variavel_teste + " = " + indice1.v + " < "+ toString(aux.tam[0]) + ";\n"+
          "  " + variavel_teste + " = !" + variavel_teste + ";\n"+
          "  if( "+ variavel_teste +") goto " + label_else + ";\n" +
          "  goto "+label_end+"; \n" + 
-         "  " + variavel_teste + " = " + s3.v + " < "+ toString(aux.tam[1]) + ";\n"+
+         "  " + variavel_teste + " = " + indice2.v + " < "+ toString(aux.tam[1]) + ";\n"+
          "  " + variavel_teste + " = !" + variavel_teste + ";\n"+
          "  if( "+ variavel_teste +") goto " + label_else + ";\n" +
          "  goto "+label_end+"; \n" + 
          label_else + ":;\n" +
-         "  cout << \"Excedeu tamanho do vetor! \";\n" +
-         "  cout << \"" + nome_var + "[\";\n"+
-         "  cout << " +  s2.v + ";\n" + 
-         "  cout << \"][\";\n"+
-         "  cout << " +  s3.v + ";\n" + 
-         "  cout << \"]\\n\";\n"+
-         "  goto l_exit;\n" +
-         label_end + ":;\n"; 
-
-  ss.v = s1.v + '[' + s2.v + ']' + '[' + s3.v + ']';
-  ss.t = s1.t; 
-  ss.var_temp = s2.var_temp + s3.var_temp + "  " + tipos["i"] + " " + variavel_teste + ";\n"; 
+         "  cerr << \"Excedeu tamanho do vetor! \";\n" +
+         "  cerr << \"" + nome_vetor.v + "[\";\n"+
+         "  cerr << " +  indice1.v + ";\n" + 
+         "  cerr << \"][\";\n"+
+         "  cerr << " +  indice2.v + ";\n" + 
+         "  cerr << \"]\\n\";\n"+
+         "  exit(1);\n" +
+         label_end + ":;\n" + 
+         "  "+ variavel_teste + " = " + indice1.v + '*' + toString(aux.tam[1]) + ";\n" +
+         "  "+ variavel_teste + " = " + variavel_teste + '+' + indice2.v + ";\n";
+         
+  ss.v = nome_vetor.v + '[' + variavel_teste + ']';
+  ss.t = aux; 
+  ss.var_temp = nome_vetor.var_temp + indice1.var_temp + indice2.var_temp + declara_variavel(variavel_teste,TipoGeral("i")); 
          
   return ss;       
 }
@@ -646,6 +779,72 @@ Atributos gera_codigo_if( Atributos expr, string cmd_then, string cmd_else ) {
          label_end + ":;\n";
          
   return ss;       
+}
+
+Atributos gera_codigo_atrib(Atributos esquerda, Atributos direita){
+    Atributos ss;
+
+    testa_tipoVariavel(esquerda,direita);
+    string variavel =  gera_nome_var_temp(esquerda.t.tipo_base);
+    
+
+    ss.c = esquerda.c + direita.c;
+    if( esquerda.t.tipo_base.compare("s") == 0 && direita.t.tipo_base.compare("s") == 0){
+      ss.c = ss.c + "  strncpy( " + esquerda.v + ", " + direita.v + ", 256 );\n";
+    }else if( esquerda.t.ndim != 0 || direita.t.ndim != 0){
+      ss.c = ss.c +  "  " + variavel + " = " + direita.v + ";\n" +
+                     "  " + esquerda.v + " = " + variavel + ";\n";
+    }else{
+      ss.c = ss.c + "  " + esquerda.v + " = " + direita.v + ";\n";
+    }
+    
+    ss.var_temp = esquerda.var_temp + direita.var_temp + declara_variavel(variavel,TipoGeral(esquerda.t.tipo_base));
+    return ss;
+}
+
+Atributos gera_codigo_writeln(Atributos expr){
+  Atributos ss;
+
+  string variavel =  gera_nome_var_temp(expr.t.tipo_base);
+
+  ss.c = expr.c;
+  if( expr.t.ndim != 0){
+      ss.c += "  " + variavel + " = " + expr.v + ";\n"+
+              "  cout << " + variavel + ";\n  cout << endl;\n";
+  }else{
+      ss.c += "  cout << " + expr.v + ";\n  cout << endl;\n";
+  }
+
+  ss.var_temp = expr.var_temp 
+                  + declara_variavel(variavel,TipoGeral(expr.t.tipo_base));
+  return ss;
+}
+
+Atributos gera_codigo_readln(Atributos expr, Atributos variavel_leitura){
+  Atributos ss;
+  
+  string variavel_expr_temp =  gera_nome_var_temp(expr.t.tipo_base);
+  string variavel_leitura_temp =  gera_nome_var_temp(variavel_leitura.t.tipo_base);
+
+  ss.c = expr.c + variavel_leitura.c;
+  if( expr.t.ndim != 0){
+      ss.c += "  " + variavel_expr_temp + " = " + expr.v + ";\n"+
+              "  cout << " + variavel_expr_temp + ";\n  cout << endl;\n";
+  }else{
+      ss.c += "  cout << " + expr.v + ";\n  cout << endl;\n";
+  }
+
+  if( variavel_leitura.t.ndim != 0){
+      ss.c += "  cin >> " + variavel_leitura_temp + ";\n" +
+              "  " + variavel_leitura.v  + " = " + variavel_leitura_temp + ";\n";
+  }else{
+      ss.c += "  cin >> " + variavel_leitura.v + ";\n";
+  }  
+
+  ss.var_temp = expr.var_temp  + variavel_leitura.var_temp
+                       + declara_variavel(variavel_expr_temp,TipoGeral(expr.t.tipo_base))
+                       + declara_variavel(variavel_leitura_temp,TipoGeral(variavel_leitura.t.tipo_base));
+  return ss;
 }
 
 string toString(int n){
