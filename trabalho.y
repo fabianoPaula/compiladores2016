@@ -450,21 +450,22 @@ WRITELN : TK_ESCREVEAI '(' E ')' { $$ =  gera_codigo_writeln($3); }
 ATRIB : F TK_ATRIB E { $$ = gera_codigo_atrib($1,$3); } 
       ;   
 
-E : E '+' E      { $$ = gera_codigo_opr( $1, "+" , $3 ); }
-  | E '-' E      { $$ = gera_codigo_opr( $1, "-" , $3 ); }
-  | E '*' E      { $$ = gera_codigo_opr( $1, "*" , $3 ); }
-  | E '/' E      { $$ = gera_codigo_opr( $1, "/" , $3 ); }
-  | E '%' E      { $$ = gera_codigo_opr( $1, "%" , $3 ); }
-  | E '<' E      { $$ = gera_codigo_opr( $1, "<" , $3 ); }
-  | E '>' E      { $$ = gera_codigo_opr( $1, ">" , $3 ); }
-  | E TK_MEIG E  { $$ = gera_codigo_opr( $1, "<=", $3 ); }
-  | E TK_MAIG E  { $$ = gera_codigo_opr( $1, ">=", $3 ); }
-  | E TK_IGUAL E { $$ = gera_codigo_opr( $1, "==", $3 ); }
-  | E TK_DIF E   { $$ = gera_codigo_opr( $1, "!=", $3 ); }
-  | E TK_E E     { $$ = gera_codigo_opr( $1, "&&" , $3 ); }
-  | E TK_OU E    { $$ = gera_codigo_opr( $1, "||", $3 ); }
-  | '(' E ')'    { $$ = $2; }
-  | F            { $$ = $1; }
+E : E '+' E             { $$ = gera_codigo_opr( $1, "+" , $3 ); }
+  | E '-' E             { $$ = gera_codigo_opr( $1, "-" , $3 ); }
+  | E '*' E             { $$ = gera_codigo_opr( $1, "*" , $3 ); }
+  | E '/' E             { $$ = gera_codigo_opr( $1, "/" , $3 ); }
+  | E '%' E             { $$ = gera_codigo_opr( $1, "%" , $3 ); }
+  | E '<' E             { $$ = gera_codigo_opr( $1, "<" , $3 ); }
+  | E '>' E             { $$ = gera_codigo_opr( $1, ">" , $3 ); }
+  | E TK_MEIG E         { $$ = gera_codigo_opr( $1, "<=", $3 ); }
+  | E TK_MAIG E         { $$ = gera_codigo_opr( $1, ">=", $3 ); }
+  | E TK_IGUAL E        { $$ = gera_codigo_opr( $1, "==", $3 ); }
+  | E TK_DIF E          { $$ = gera_codigo_opr( $1, "!=", $3 ); }
+  | E TK_E E            { $$ = gera_codigo_opr( $1, "&&" , $3 ); }
+  | F TK_PERTENCE F     { $$ = gera_codigo_opr( $1, "in" , $3 ); } // Só posso fazer 'in' com variaveis e vetores
+  | E TK_OU E           { $$ = gera_codigo_opr( $1, "||", $3 ); }
+  | '(' E ')'           { $$ = $2; }
+  | F                   { $$ = $1; }
   ;
   
 F : NOME_VAR           { $$ = $1; }
@@ -608,6 +609,10 @@ void preload() {
 
   // Resultados para o operador "||"
   tipo_opr["b||b"] = "b";
+
+  // Resultados para o operador "in"
+  tipo_opr["iini"] = "b";
+  tipo_opr["dind"] = "b";
 
   tipos["i"] = "int";
   tipos["d"] = "double";
@@ -786,6 +791,48 @@ Atributos gera_codigo_opr_vetor(Atributos s1, Atributos s2, Atributos result, st
     return result;
 }
 
+
+Atributos gera_codigo_opr_in_vetor(Atributos s1, Atributos s2, Atributos result){
+    string label_teste = gera_label( "teste_for_comparativo_array" );
+    string label_fim = gera_label( "fim_for_comparativo_array" );
+    string label_falso = gera_label( "expressao_falsa" );
+
+    string condicao = gera_nome_var_temp( "b" );
+    string controle = gera_nome_var_temp( "i" );
+    string v1 = gera_nome_var_temp( s1.t.tipo_base );
+    string v2 = gera_nome_var_temp( s1.t.tipo_base );
+  
+    result.c +=
+            "  " + controle + " = 0 ;\n" +
+            "  " + v1 + " = " + s1.v + ";\n"+
+            label_teste + ":;\n" +
+            "  " +condicao+" = "+ controle + " < " + toString(s2.t.tam[0]) + ";\n" + 
+            "  " +condicao+" = !"+condicao+ ";\n" + 
+            "  if( " + condicao + " ) goto " + label_fim + ";\n";
+
+    if ( (s1.t.tipo_base.compare("s") == 0)){          
+      result.c += "  strncat( " + v1 + ", " + s2.v + "[" + controle + "]" + ", 256 );\n";
+    }else{
+      result.c += "  " + v2 + " = " + s2.v + "[" + controle + "];\n";
+    }
+
+    result.c +=       
+            "  " + condicao + " = " + v1 + " == " + v2 + ";\n"+
+            "  " + condicao + " =  !" + condicao + ";\n" + 
+            "  if( " + condicao + " ) goto " + label_falso + ";\n" +
+            "  " + result.v + " = 1;\n" +
+            "  " + controle + " = " + controle + " + 1;\n" +
+            "  goto " + label_teste + ";\n" +
+            label_falso + ":;\n"
+            "  " + result.v + " = 0;\n" +
+            label_fim + ":;\n";  
+    result.var_temp += declara_variavel(condicao,TipoGeral("b")) +
+                       declara_variavel(controle,TipoGeral("i")) +
+                       declara_variavel(v1,TipoGeral(s1.t.tipo_base)) +
+                       declara_variavel(v2,TipoGeral(s1.t.tipo_base));
+    return result;
+}
+
 Atributos gera_codigo_opr(Atributos s1, string opr, Atributos s2){
   Atributos result;
   string typeOfOpr =  s1.t.tipo_base + opr + s2.t.tipo_base;
@@ -795,7 +842,14 @@ Atributos gera_codigo_opr(Atributos s1, string opr, Atributos s2){
   result.var_temp = s1.var_temp + s2.var_temp + declara_variavel(result.v, TipoGeral(result.t) );
   result.c = s1.c + s2.c;
 
-  if ( (s1.t.ndim == 1) && (s2.t.ndim == 1) && (opr.compare("==") == 0)){
+  if( opr.compare("in") == 0){
+    if( (s1.t.ndim != 0)||((s2.t.ndim != 1)&&(s2.t.ndim != 2)) )
+      error("operador in -> varivel in array; " + s1.v + " in " + s2.v);
+    if(s1.t.tipo_base.compare(s2.t.tipo_base) != 0)
+      error("operador in precisa de dois tipos iguais: " + s1.t.tipo_base + " in " + s2.t.tipo_base);
+
+    result = gera_codigo_opr_in_vetor(s1,s2,result);
+  }else if ( (s1.t.ndim == 1) && (s2.t.ndim == 1) && (opr.compare("==") == 0)){
       result = gera_codigo_opr_vetor(s1,s2,result,"==");
   } else if ( (s1.t.ndim == 1) && (s2.t.ndim == 1) && (opr.compare("!=") == 0)){
       result = gera_codigo_opr_vetor(s1,s2,result,"!=");
