@@ -49,7 +49,6 @@ COMMENT "(*"([^*]|"*"[^)])*"*)"
 "senao"            { yylval = Atributos( yytext); return TK_SENAO; }
 
 "enquanto"		   { yylval = Atributos( yytext); return TK_ENQUANTO; }
-"para"		       { yylval = Atributos( yytext); return TK_PARA; }
 "vai"		       { yylval = Atributos( yytext); return TK_VAI; }
 "ate"		       { yylval = Atributos( yytext); return TK_ATE; }
 "faça"		       { yylval = Atributos( yytext); return TK_FACA; }
@@ -62,6 +61,8 @@ COMMENT "(*"([^*]|"*"[^)])*"*)"
 [Bb][Ee][Ll][Ee][Zz][Aa]     { yylval = Atributos( yytext); return TK_BELEZA; }
 [Vv][Ll][Ww]                 { yylval = Atributos( yytext); return TK_VLW; }
 
+[Rr][Ee][Tt][Oo][Rr][Nn][Aa] { yylval = Atributos( yytext); return TK_RETORNA; }
+
 
 "e"                { yylval = Atributos( yytext ); return TK_E;  }
 "&&"               { yylval = Atributos( yytext ); return TK_E;  }
@@ -73,6 +74,8 @@ COMMENT "(*"([^*]|"*"[^)])*"*)"
 ">="       { yylval = Atributos( yytext ); return TK_MAIG;  }
 "!="       { yylval = Atributos( yytext ); return TK_DIF;   }
 "="        { yylval = Atributos( yytext ); return TK_ATRIB; }
+
+[Pp][Ee][Rr][Tt][Ee][Nn][Cc][Ee] { yylval = Atributos( yytext ); return TK_PERTENCE; }
 
 {CSTRING}  { yylval = Atributos( troca_aspas(yytext), "s" ); return TK_CSTRING; }
 {ID}       { yylval = Atributos( yytext ); return TK_ID; }
