@@ -360,7 +360,7 @@ CMD_LING : TK_ID '(' PARAMS_FUNC ')'
 
             for( int i = 0; i < $3.parametros.size(); i++){
                 code_ant = code_ant + $3.parametros[i].c;                
-                aux = aux + $3.parametros[i].v;
+                aux = aux + $3.parametros[i].v + ((i != $3.parametros.size()-1)? ",": "");
                 var_temp_aux = var_temp_aux + $3.parametros[i].var_temp;
             }
 
