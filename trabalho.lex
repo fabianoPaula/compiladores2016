@@ -19,12 +19,13 @@ COMMENT "(*"([^*]|"*"[^)])*"*)"
 {DELIM}      {}
 {COMMENT}    {}
 
+[Ff][Uu][Nn][Cc][Aa][Oo]:    { yylval = Atributos( yytext ); return TK_FUNCAO;  }
+[Ii][Nn][Ii][Cc][Ii][Aa][Rr] { yylval = Atributos( yytext ); return TK_INICIAR; }
+[Cc][Oo][Mm]                 { yylval = Atributos( yytext ); return TK_COM;     }
+[Tt][Ee][Nn][Tt][Ee]         { yylval = Atributos( yytext ); return TK_TENTE;   }
 
-"começar"    { yylval = Atributos( yytext ); return TK_COMECAR; }
-"com"        { yylval = Atributos( yytext ); return TK_COM; }
-"tente"      { yylval = Atributos( yytext ); return TK_TENTE; }
 
-"devolve"          { yylval = Atributos( yytext ); return TK_DEVOLVE; }
+[Dd][Ee][Vv][Oo][Ll][Vv][Ee]  { yylval = Atributos( yytext ); return TK_DEVOLVE; }
 
 ",tranquilo?"    { yylval = Atributos( yytext ); return TK_TRANQUILO; }
 "favoravel"      { yylval = Atributos( yytext ); return TK_FAVORAVEL; }
@@ -51,7 +52,7 @@ COMMENT "(*"([^*]|"*"[^)])*"*)"
 "enquanto"		   { yylval = Atributos( yytext); return TK_ENQUANTO; }
 "vai"		       { yylval = Atributos( yytext); return TK_VAI; }
 "ate"		       { yylval = Atributos( yytext); return TK_ATE; }
-"faça"		       { yylval = Atributos( yytext); return TK_FACA; }
+[Ff][Aa][Cc][Aa]   { yylval = Atributos( yytext); return TK_FACA; }
 
 [Ee][Ss][Cc][Oo][Ll][Hh][Ee] { yylval = Atributos( yytext); return TK_ESCOLHE; }
 [Ee][Nn][Tt][Rr][Ee]         { yylval = Atributos( yytext); return TK_ENTRE; }

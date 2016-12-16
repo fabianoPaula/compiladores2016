@@ -35,7 +35,7 @@ struct TipoGeral{
   TipoGeral(string tipo) {
     tipo_base = tipo;
     ndim = BASICO;
-    tam[0] = -1;
+    tam[0] = (tipo.compare("s") == 0) ? 1 : -1;
     tam[1] = -1;
   }
 
@@ -67,6 +67,7 @@ struct Atributos {
   vector<string> lista_str; // Uma lista auxiliar para os nomes das variaveis.
   vector<TipoGeral>   lista_tipo; // Uma lista auxiliar para os nomes das variaveis.
 
+  vector<Atributos> parametros; // Um vetor auxiliar para ajudar no tratamento de chamadas de funções
 
   string var_temp; // Variaveis temporárias criadas
   
@@ -108,7 +109,7 @@ map< string, string > tipo_opr;
 // Dicionário para os tipos da forma intermediária
 map< string, string > tipos;
 
-map<string,TipoGeral> tabela_simbolos;
+vector< map<string,TipoGeral> > tabela_simbolos;
 
 // Declarar todas as funções que serão usadas.
 
@@ -129,7 +130,7 @@ string declara_funcao(string nome, TipoGeral tipo,vector<string> nomes, vector<T
 string gera_nome_var_temp( string tipo );
 string gera_label(string tipo);
 
-void testa_tipoVariavel(Atributos s1, Atributos s2);
+int testa_tipoVariavel(TipoGeral t1, TipoGeral t2);
 
 // Função auxilixar para o comando fechamento_switch
 string last_label_swicth();
@@ -151,8 +152,10 @@ int    toInt(string valor);
 void   debug( string producao, Atributos atr );
 void   error(string);
 
+string clean_vars(string str);
 
-string includes = 
+
+string decls = 
 "#include <iostream>\n"
 "#include <stdio.h>\n"
 "#include <stdlib.h>\n"
@@ -167,8 +170,8 @@ string includes =
 
 %}
 
-// Token de blocos
-%token TK_TRANQUILO TK_FAVORAVEL TK_COMECAR TK_DEVOLVE
+// Token de blocos 
+%token TK_TRANQUILO TK_FAVORAVEL TK_DEVOLVE TK_INICIAR TK_FUNCAO
 
 // Lista de parâmetros
 %token TK_COM TK_TENTE 
@@ -211,11 +214,12 @@ string includes =
 %%
 
 /* Escopo Principal */
-S : DECLS COMECA
+S : {empilha_ts(); } DECLS MAIN
     {
-      cout << includes << endl;
-      cout << $1.c << endl;
-      cout << $2.c << endl;     
+
+      cout << decls << endl;
+      cout << $2.c << endl;
+      cout << $3.c << endl;     
     }
   ;
 
@@ -226,13 +230,67 @@ DECLS : DECL DECLS { $$.c = $1.c + $2.c;  }
       ;  
 
 DECL : BLOCO_VARS
+     | FUNCTION
      ;
+
+FUNCTION : { empilha_ts(); } TK_FUNCAO CABECALHO CORPO { desempilha_ts(); }';' {  $$.c = "\n" + $3.c + "{\n" + $4.c + "}\n\n"; }
+         ;
+
+CABECALHO : OPC_PARAMS TK_ID TK_DEVOLVE TIPO_VAR { $$.c = declara_funcao($2.v, TipoGeral($4.t), $1.lista_str, $1.lista_tipo ); }
+          ;
+
+OPC_PARAMS: TK_COM '(' PARAMS ')' TK_TENTE { $$ = $3; }
+          | TK_TENTE { $$ = Atributos();}
+          ;             
+
+PARAMS : PARAM ';' PARAMS 
+         { 
+            $$.c = $1.c + $3.c; 
+            // Juntando todos os parâmetros
+            $$.lista_tipo = $1.lista_tipo;
+            $$.lista_tipo.insert( $$.lista_tipo.end(), 
+                                  $3.lista_tipo.begin(),  
+                                  $3.lista_tipo.end() ); 
+
+            $$.lista_str = $1.lista_str;
+            $$.lista_str.insert( $$.lista_str.end(), 
+                                 $3.lista_str.begin(),  
+                                 $3.lista_str.end() ); 
+         }
+       | PARAM  { $$.c = $1.c; }
+       | { $$.c = ""; }
+       ;     
+     
+PARAM : TIPO_VAR TK_ID                                 
+        { 
+          $$ = Atributos();
+          $$.lista_str.push_back($2.v);
+          $$.lista_tipo.push_back(TipoGeral($1.t.tipo_base));
+        }
+      | TIPO_VAR '[' TK_CINT ']' TK_ID                 
+        { 
+          $$ = Atributos();
+          $$.lista_str.push_back($5.v);
+          $$.lista_tipo.push_back(TipoGeral($1.t.tipo_base,toInt($3.v)));
+        }
+      | TIPO_VAR '[' TK_CINT ']' '[' TK_CINT ']' TK_ID 
+        {
+          $$ = Atributos();
+          $$.lista_str.push_back($8.v);
+          $$.lista_tipo.push_back(TipoGeral($1.t.tipo_base,toInt($3.v),toInt($6.v)));
+        }
+      ;          
+
+CORPO : BLOCO_VARS BLOCO { $$.c = $1.c + $2.var_temp + $2.c; }
+      | BLOCO            { $$.c = $1.var_temp + $1.c; }
+      ;          
+
 
 BLOCO_VARS : TK_VARIAVEIS VARS { $$.c = $2.c; }
            ;
 
-
 VARS : VAR ';' VARS { $$.c = $1.c + $3.c; }
+     | VAR  { $$.c = $1.c; }
      | { $$.c = ""; }
      ;     
      
@@ -247,7 +305,6 @@ TIPO_VAR : TK_TIPO_NUMERO             { $$ = $1; }
          | TK_TIPO_PALAVRA            { $$ = $1; }
          | TK_TIPO_SIMOUNAO           { $$ = $1; }
          ;
-
     
 IDS : TK_ID ',' IDS { $3.lista_str.push_back($1.v); $$ = $3; }
     | TK_ID         { $1.lista_str.push_back($1.v); $$ = $1; }
@@ -255,19 +312,10 @@ IDS : TK_ID ',' IDS { $3.lista_str.push_back($1.v); $$ = $3; }
 
 // Declaração  do método Principal
 
-COMECA : PARAMS TK_COMECAR TK_DEVOLVE TIPO_VAR BLOCO_VARS BLOCO 
-          {  
-            $$.c = $5.c +"int main(){\n" + $6.var_temp + $6.c + "l_exit:;\n  return 0;\n}"; 
-          }
-       | PARAMS TK_COMECAR TK_DEVOLVE TIPO_VAR BLOCO 
-          { 
-            $$.c = "int main(){ \n" + $5.var_temp + $5.c + "}"; 
-          }  
-       ;
+MAIN : TK_TENTE TK_INICIAR TK_DEVOLVE TIPO_VAR BLOCO_VARS BLOCO { $$.c = $5.c +"int main("+ clean_vars($1.c) +"){\n" + $6.var_temp + $6.c + "l_exit:;\n  return 0;\n}"; }
+     | TK_TENTE TK_INICIAR TK_DEVOLVE TIPO_VAR BLOCO {  $$.c = "int main("+ clean_vars($1.c) +"){ \n" + $5.var_temp + $5.c + "}"; }  
+     ;
 
-PARAMS: TK_COM TK_TENTE
-      | TK_TENTE
-      ;   
 
 BLOCO : TK_TRANQUILO CMDS TK_FAVORAVEL { $$.c = $2.c; $$.var_temp = $2.var_temp; }
       ;
@@ -288,7 +336,51 @@ CMD : WRITELN
     | CMD_SWICTH
     | CMD_IF
     | CMD_RETORNA
+    | CMD_LING
     ; 
+
+
+CMD_LING : TK_ID '(' PARAMS_FUNC ')'
+         {
+            TipoGeral funcao = consulta_ts($1.v);
+
+            if( funcao.params.size() != $3.parametros.size() )
+              error("Número de parâmetros errado, Função: " + $1.v + " requer " + toString(funcao.params.size()) + " dado " + toString($3.parametros.size()));
+
+            for( int i = 0; i < funcao.params.size(); i++){
+              if( testa_tipoVariavel(funcao.params[i], $3.parametros[i].t) )
+                error("Tipo de parâmetro errado: parâmetro " + toString(i+1) + " tipo errado,  esperado "+ funcao.params[i].tipo_base );
+            }
+
+            string aux = "";
+            string code_ant = "";
+            string var_temp_aux = "";
+
+            aux = "  "+ $1.v+ "(";
+
+            for( int i = 0; i < $3.parametros.size(); i++){
+                code_ant = code_ant + $3.parametros[i].c;                
+                aux = aux + $3.parametros[i].v;
+                var_temp_aux = var_temp_aux + $3.parametros[i].var_temp;
+            }
+
+            aux = aux + ");\n";
+
+            $$.c = code_ant + aux;
+            $$.var_temp = var_temp_aux;
+         }
+         ;
+
+PARAMS_FUNC : E ',' PARAMS_FUNC 
+              { 
+                 $$.parametros.push_back($1);
+                 $$.parametros.insert( $$.parametros.end(), 
+                                       $3.parametros.begin(),  
+                                       $3.parametros.end() );
+              }
+            | E { $$.parametros.push_back($1); }
+            | { $$ = Atributos(); }
+            ;     
 
 CMD_RETORNA : TK_RETORNA E
               {
@@ -299,13 +391,15 @@ CMD_RETORNA : TK_RETORNA E
 
 CMD_IF : TK_SE E TK_FAZ CMD
          { 
-           testa_tipoVariavel($2,Atributos("","b"));
+           if( testa_tipoVariavel($2.t,TipoGeral("b")) )
+              error("Atribuição com tipos errados errados! "+ $2.t.tipo_base +" <- b");
            $$ = gera_codigo_if( $2, $4.c, "" ); 
            $$.var_temp = $2.var_temp + $4.var_temp; 
          }  
        | TK_SE E TK_FAZ CMD TK_SENAO CMD 
           { 
-            testa_tipoVariavel($2,Atributos("","b"));
+            if( testa_tipoVariavel($2.t,TipoGeral("b")) )
+              error("Atribuição com tipos errados errados! "+ $2.t.tipo_base +" <- b");
             $$ = gera_codigo_if( $2, $4.c, $6.c ); 
             $$.var_temp = $2.var_temp + $4.var_temp + $6.var_temp; 
           }  
@@ -376,7 +470,8 @@ BELEZA : TK_BELEZA ';'
 
 CMD_WHILE : TK_ENQUANTO E TK_FACA CMD 
             {
-              testa_tipoVariavel($2,Atributos("","b"));
+              if( testa_tipoVariavel($2.t,TipoGeral("b")) )
+                error("Atribuição com tipos errados errados! "+ $2.t.tipo_base +" <- b");
 
               string label_teste = gera_label( "teste_while" );
               string label_fim = gera_label( "fim_while" );
@@ -396,7 +491,8 @@ CMD_WHILE : TK_ENQUANTO E TK_FACA CMD
 
 CMD_DO_WHILE : TK_FACA BLOCO TK_ENQUANTO E  
             {
-              testa_tipoVariavel($4,Atributos("","b"));
+              if( testa_tipoVariavel($2.t,TipoGeral("b")) )
+                error("Atribuição com tipos errados errados! "+ $2.t.tipo_base +" <- b");
 
               string label_inicio = gera_label( "inicio_do_while" );
               string condicao = gera_nome_var_temp( "b" );
@@ -414,10 +510,14 @@ CMD_DO_WHILE : TK_FACA BLOCO TK_ENQUANTO E
 
 CMD_FOR : TK_ENQUANTO NOME_VAR TK_ATRIB E TK_VAI TK_ATE E TK_FACA CMD 
           { 
-            Atributos ss("","i");
-            testa_tipoVariavel($2,ss);
-            testa_tipoVariavel($4,ss);
-            testa_tipoVariavel($7,ss);
+            TipoGeral ss("i");
+            
+            if( testa_tipoVariavel($2.t,ss) )
+              error("Atribuição com tipos errados errados! "+ $2.t.tipo_base +" <- i");
+            if( testa_tipoVariavel($4.t,ss) )
+              error("Atribuição com tipos errados errados! "+ $4.t.tipo_base +" <- i");
+            if( testa_tipoVariavel($7.t,ss) )
+              error("Atribuição com tipos errados errados! "+ $7.t.tipo_base +" <- i");
 
             string var_fim = gera_nome_var_temp( $2.t.tipo_base);
             string label_teste = gera_label( "teste_for" );
@@ -621,8 +721,20 @@ void preload() {
   tipos["b"] = "int";
 }
 
+void empilha_ts() {
+  map< string, TipoGeral > novo;
+  tabela_simbolos.push_back( novo );
+}
+
+void desempilha_ts() {
+  tabela_simbolos.pop_back();
+}
+
 int existe_ts(string nome_var){
-  return (tabela_simbolos.find(nome_var) != tabela_simbolos.end());
+  for( int i = tabela_simbolos.size()-1; i >= 0; i-- )
+    if( tabela_simbolos[i].find( nome_var ) != tabela_simbolos[i].end() )
+      return 1;
+  return 0;
 }
 
 string last_label_swicth(){
@@ -641,27 +753,27 @@ void close_switch(){
 }
 
 TipoGeral consulta_ts( string nome_var ) {
-//  for( int i = tabela_simbolos.size()-1; i >= 0; i-- )
-//    if( tabela_simbolos[i].find( nome_var ) != tabela_simbolos[i].end() )
-//      return tabela_simbolos[i][ nome_var ];
+  for( int i = tabela_simbolos.size()-1; i >= 0; i-- )
+    if( tabela_simbolos[i].find( nome_var ) != tabela_simbolos[i].end() )
+      return tabela_simbolos[i][ nome_var ];
     
-  if( tabela_simbolos.find( nome_var ) != tabela_simbolos.end() )
-      return tabela_simbolos[ nome_var ];
-  error( "Variável não declarada: " + nome_var );
+//  if( tabela_simbolos.find( nome_var ) != tabela_simbolos.end() )
+//      return tabela_simbolos[ nome_var ];
+    error( "Variável não declarada: " + nome_var );
   
-  return TipoGeral();
+    return TipoGeral();
 }
 
 void inserir_var_ts( string nome_var, TipoGeral tipo ) {
-//  if( tabela_simbolos[tabela_simbolos.size()-1].find( nome_var ) != tabela_simbolos[tabela_simbolos.size()-1].end() )
-//    error( "Variável já declarada: " + nome_var + 
-//          " (" + tabela_simbolos[tabela_simbolos.size()-1][ nome_var ].tipo_base + ")" );   
-//  tabela_simbolos[tabela_simbolos.size()-1][ nome_var ] = tipo;
-
-  if( tabela_simbolos.find( nome_var ) != tabela_simbolos.end() )
+  if( tabela_simbolos[tabela_simbolos.size()-1].find( nome_var ) != tabela_simbolos[tabela_simbolos.size()-1].end() )
     error( "Variável já declarada: " + nome_var + 
-          " (" + tabela_simbolos[ nome_var ].tipo_base + ")" );   
-  tabela_simbolos[ nome_var ] = tipo;
+          " (" + tabela_simbolos[tabela_simbolos.size()-1][ nome_var ].tipo_base + ")" );   
+  tabela_simbolos[tabela_simbolos.size()-1][ nome_var ] = tipo;
+
+//  if( tabela_simbolos.find( nome_var ) != tabela_simbolos.end() )
+//    error( "Variável já declarada: " + nome_var + 
+//          " (" + tabela_simbolos[ nome_var ].tipo_base + ")" );   
+//  tabela_simbolos[ nome_var ] = tipo;
 }
 
 string gera_nome_var_temp( string tipo ) {
@@ -670,13 +782,17 @@ string gera_nome_var_temp( string tipo ) {
   return nome; 
 }
 
-void testa_tipoVariavel(Atributos s1, Atributos s2){
-  if( s1.t.tipo_base.compare(s2.t.tipo_base) != 0){
-    debug("TIPO ERRADO",s1);
-    debug("TIPO ERRADO",s2);
-    error("Atribuição com tipos errados errados! "+ s1.t.tipo_base +" <- "+ s2.t.tipo_base);
+int testa_tipoVariavel(TipoGeral t1, TipoGeral t2){
+  if( t1.tipo_base.compare(t2.tipo_base) != 0){
+    cerr << "Tipos errados!" << endl;
+    cerr << TipoGeralToString(t1) << endl;
+    cerr << TipoGeralToString(t1) << endl;
+   // error("Atribuição com tipos errados errados! "+ t1.tipo_base +" <- "+ t2.tipo_base);
+    return 1;
   }  
+  return 0;
 }
+
 
 string gera_label( string tipo ) {
   static int n = 0;
@@ -685,8 +801,12 @@ string gera_label( string tipo ) {
 }
 
 string declara_variavel( string nome, TipoGeral tipo ) {
-  if( tipos[ tipo.tipo_base ] == "" ) 
-    error( "Tipo inválido: " + tipo.tipo_base );
+
+  if( tipos[ tipo.tipo_base ].compare("") == 0) 
+    error( "Tipo inválido de variável: " + tipo.tipo_base );
+
+  if( (tipo.tipo_base.compare("s") == 0)&&(tipo.ndim != 0) )
+    error( "Tipo inválido, não suportado pela linguagem: vetor de string ");
     
   string indice;
    
@@ -707,23 +827,59 @@ string declara_variavel( string nome, TipoGeral tipo ) {
   return tipos[ tipo.tipo_base ] + "  "+ nome + indice + ";\n";
 }
 
-string declara_funcao(string nome, TipoGeral tipo,vector<string> nomes, vector<TipoGeral> tipos ) {
-
-  if( tipo_opr[tipo.tipo_base] == "" ) 
-    error( "Tipo inválido: " + tipo.tipo_base );
+void inserir_funcao_ts( string nome_func,TipoGeral retorno, vector<TipoGeral> params ) {
+  if( tabela_simbolos[tabela_simbolos.size()-2].find( nome_func ) != tabela_simbolos[tabela_simbolos.size()-2].end() )
+    error( "Função já declarada: " + nome_func );
     
-  if( nomes.size() != tipos.size() )
+  tabela_simbolos[tabela_simbolos.size()-2][ nome_func ] = TipoGeral( retorno, params );
+}
+
+string declara_param( string nome, TipoGeral tipo ) {
+
+  if( tipos[ tipo.tipo_base ].compare("") == 0) 
+    error( "Tipo inválido de parâmetro: " + tipo.tipo_base );
+
+  if( (tipo.tipo_base.compare("s") == 0)&&(tipo.ndim != 0) )
+    error( "Tipo inválido, não suportado pela linguagem: vetor de string ");
+    
+  string indice;
+   
+  switch( tipo.ndim ) {
+    case 0: indice = (tipo.tipo_base == "s" ? "[256]" : "");
+            break;
+              
+    case 1: indice = "[" +toString(tipo.tam[0]*(tipo.tipo_base == "s" ? 256 : 1)) + "]";
+            break; 
+            
+    case 2: indice = "[" +toString(tipo.tam[0]*tipo.tam[1]*(tipo.tipo_base == "s" ? 256 : 1)) + "]";
+            break;
+    
+    default:
+       error( "Bug muito sério..." );
+  } 
+  
+  return tipos[ tipo.tipo_base ] + "  "+ nome + indice;
+}
+
+string declara_funcao(string nome, TipoGeral tipo,vector<string> nomes_param, vector<TipoGeral> tipos_param ) {
+
+  if( tipos[ tipo.tipo_base ].compare("") == 0 ) 
+    error( "Tipo inválido de Função: " + tipo.tipo_base );
+    
+  if( nomes_param.size() != tipos_param.size() )
     error( "Bug no compilador! Nomes e tipos de parametros diferentes." );
       
   string aux = "";
   
-  for( int i = 0; i < nomes.size(); i++ ) {
-    aux += declara_variavel( nomes[i], tipos[i] ) + 
-           (i == nomes.size()-1 ? " " : ", ");  
-    inserir_var_ts( nomes[i],tipos[i]);  
+  for( int i = 0; i < nomes_param.size(); i++ ) {
+    aux += declara_param( nomes_param[i], tipos_param[i] ) + 
+           (i == nomes_param.size()-1 ? " " : ", ");  
+    inserir_var_ts( nomes_param[i],tipos_param[i]);  
   }
+
+  inserir_funcao_ts( nome,tipo,tipos_param);
       
-  return tipo_opr[ tipo.tipo_base ] + " " + nome + "(" + aux + ")";
+  return tipos[ tipo.tipo_base ] + " " + nome + "(" + aux + ")";
 }
 
 Atributos cria_variavel(vector<string> lista, TipoGeral tipo){
@@ -950,7 +1106,8 @@ Atributos gera_codigo_if( Atributos expr, string cmd_then, string cmd_else ) {
 Atributos gera_codigo_atrib(Atributos esquerda, Atributos direita){
     Atributos ss;
 
-    testa_tipoVariavel(esquerda,direita);
+    if( testa_tipoVariavel(esquerda.t,direita.t) ) 
+    ;
     string variavel =  gera_nome_var_temp(esquerda.t.tipo_base);
 
     ss.c = esquerda.c + direita.c;
@@ -1024,6 +1181,27 @@ int toInt(string valor){
     error("Número Inválido: " + valor);
   return aux;
 }
+
+string replaceChar(string str, char find, char repl){
+  string::iterator it;
+  string aux = "";
+
+  for(it = str.begin(); it != str.end(); it++)
+      if ( *it == find) 
+        aux = aux + repl;
+      else
+        aux = aux + *it; 
+
+  return aux;
+}
+
+string clean_vars(string str){
+    string aux  = replaceChar(str,';',',');
+    string aux2 = replaceChar(aux,'\n','\0');
+    size_t last = aux2.find_last_not_of(' ');
+    return aux2.substr(0,last-1);
+}
+
 
 int main( int argc, char* argv[] )
 {
