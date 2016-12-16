@@ -26,37 +26,41 @@ struct TipoGeral{
   vector<TipoGeral> params;
 
   TipoGeral() {
-    tipo_base = "";
-    ndim = BASICO;
-    tam[0] = -1;
-    tam[1] = -1;
+    this->tipo_base = "";
+    this->ndim = BASICO;
+    this->tam[0] = -1;
+    this->tam[1] = -1;
   } 
 
   TipoGeral(string tipo) {
-    tipo_base = tipo;
-    ndim = BASICO;
-    tam[0] = (tipo.compare("s") == 0) ? 1 : -1;
-    tam[1] = -1;
+    this->tipo_base = tipo;
+    this->ndim = BASICO;
+    this->tam[0] = (tipo.compare("s") == 0) ? 1 : -1;
+    this->tam[1] = -1;
   }
 
   TipoGeral(string tipo, int v1) {
-    tipo_base = tipo;
-    ndim = VETOR;
-    tam[0] = v1;
-    tam[1] = -1;
+    this->tipo_base = tipo;
+    this->ndim = VETOR;
+    this->tam[0] = v1;
+    this->tam[1] = -1;
   }
 
   TipoGeral(string tipo, int v1, int v2) {
-    tipo_base = tipo;
-    ndim = MATRIZ;
-    tam[0] = v1;
-    tam[1] = v2;
+    this->tipo_base = tipo;
+    this->ndim = MATRIZ;
+    this->tam[0] = v1;
+    this->tam[1] = v2;
   }
 
   TipoGeral(TipoGeral retorno, vector<TipoGeral> params){
-    ndim = FUNCAO;
+    this->ndim = FUNCAO;
     this->retorno.push_back( retorno );
     this->params = params;
+    this->tipo_base = retorno.tipo_base;
+    this->ndim = retorno.ndim;
+    this->tam[0] = (retorno.tipo_base.compare("s") == 0) ? 1 : -1;
+    this->tam[1] = -1;
   }
 
 };
@@ -72,24 +76,38 @@ struct Atributos {
   string var_temp; // Variaveis temporárias criadas
   
   Atributos() { // Constutor vazio
-    v = "";
-    t = TipoGeral();
-    c = "";
-    var_temp = "";
+    this->v = "";
+    this->t = TipoGeral();
+    this->c = "";
+    this->var_temp = "";
   } 
 
   Atributos( string valor ) {
-    v = valor;
-    t = TipoGeral();
-    c = "";
-    var_temp = "";
+    this->v = valor;
+    this->t = TipoGeral();
+    this->c = "";
+    this->var_temp = "";
   }
 
-  Atributos( string valor, string tipo ) {
-    v = valor;
-    t = TipoGeral(tipo);
-    c = "";
-    var_temp = "";
+  Atributos( string valor, TipoGeral tipo ) {
+    this->v = valor;
+    this->t = tipo;
+    this->c = "";
+    this->var_temp = "";
+  }
+
+  Atributos( string valor, TipoGeral tipo, string codigo ) {
+    this->v = valor;
+    this->t = tipo;
+    this->c = codigo;
+    this->var_temp = "";
+  }
+
+  Atributos( string valor, TipoGeral tipo, string codigo, string var_temp) {
+    this->v = valor;
+    this->t = tipo;
+    this->c = codigo;
+    this->var_temp = var_temp;
   }
 };
 
@@ -281,8 +299,8 @@ PARAM : TIPO_VAR TK_ID
         }
       ;          
 
-CORPO : BLOCO_VARS BLOCO { $$.c = $1.c + $2.var_temp + $2.c; }
-      | BLOCO            { $$.c = $1.var_temp + $1.c; }
+CORPO : BLOCO_VARS BLOCO { $$ = Atributos("",TipoGeral(),$1.c + $2.var_temp + $2.c); }
+      | BLOCO            { $$ = Atributos("",TipoGeral(),$1.var_temp + $1.c); }
       ;          
 
 
@@ -343,6 +361,7 @@ CMD : WRITELN
 CMD_LING : TK_ID '(' PARAMS_FUNC ')'
          {
             TipoGeral funcao = consulta_ts($1.v);
+            string variavel_resultado =  gera_nome_var_temp(funcao.tipo_base);
 
             if( funcao.params.size() != $3.parametros.size() )
               error("Número de parâmetros errado, Função: " + $1.v + " requer " + toString(funcao.params.size()) + " dado " + toString($3.parametros.size()));
@@ -352,11 +371,9 @@ CMD_LING : TK_ID '(' PARAMS_FUNC ')'
                 error("Tipo de parâmetro errado: parâmetro " + toString(i+1) + " tipo errado,  esperado "+ funcao.params[i].tipo_base );
             }
 
-            string aux = "";
+            string aux = "  "+variavel_resultado +" = "+ $1.v+ "(";
             string code_ant = "";
-            string var_temp_aux = "";
-
-            aux = "  "+ $1.v+ "(";
+            string var_temp_aux = declara_variavel(variavel_resultado, funcao);
 
             for( int i = 0; i < $3.parametros.size(); i++){
                 code_ant = code_ant + $3.parametros[i].c;                
@@ -366,8 +383,7 @@ CMD_LING : TK_ID '(' PARAMS_FUNC ')'
 
             aux = aux + ");\n";
 
-            $$.c = code_ant + aux;
-            $$.var_temp = var_temp_aux;
+            $$ = Atributos(variavel_resultado,funcao,code_ant + aux,var_temp_aux);
          }
          ;
 
@@ -382,11 +398,7 @@ PARAMS_FUNC : E ',' PARAMS_FUNC
             | { $$ = Atributos(); }
             ;     
 
-CMD_RETORNA : TK_RETORNA E
-              {
-                $$.c = $2.c + "  return " + $2.v + ";\n";
-                $$.var_temp = $2.var_temp;
-              }
+CMD_RETORNA : TK_RETORNA E { $$ = Atributos("",TipoGeral(), $2.c + "  return " + $2.v + ";\n",$2.var_temp); }
             ;
 
 CMD_IF : TK_SE E TK_FAZ CMD
@@ -571,14 +583,15 @@ E : E '+' E             { $$ = gera_codigo_opr( $1, "+" , $3 ); }
 F : NOME_VAR           { $$ = $1; }
   | NOME_VAR '[' E ']' { $$ = gera_codigo_teste_vetor($1,$3); }
   | NOME_VAR '[' E ']' '[' E ']'{ $$ = gera_codigo_teste_matrix($1,$3,$6); }
-  | TK_CINT    { $$.v = $1.v; $$.t = TipoGeral("i"); $$.c = $1.c; }
-  | TK_CDOUBLE { $$.v = $1.v; $$.t = TipoGeral("d"); $$.c = $1.c; }
-  | TK_CSTRING { $$.v = $1.v; $$.t = TipoGeral("s"); $$.c = $1.c; }
-  | TK_VERDADE { $$.v = $1.v; $$.t = TipoGeral("b"); $$.c = $1.c; }
-  | TK_MENTIRA { $$.v = $1.v; $$.t = TipoGeral("b"); $$.c = $1.c; }
+  | TK_CINT    { $$ = Atributos($1.v,TipoGeral("i"),$1.c); }
+  | TK_CDOUBLE { $$ = Atributos($1.v,TipoGeral("d"),$1.c); }
+  | TK_CSTRING { $$ = Atributos($1.v,TipoGeral("s"),$1.c); }
+  | TK_VERDADE { $$ = Atributos($1.v,TipoGeral("b"),$1.c); }
+  | TK_MENTIRA { $$ = Atributos($1.v,TipoGeral("b"),$1.c); }
+  | CMD_LING   { $$ = $1;}
   ;
 
-NOME_VAR : TK_ID { $$.v = $1.v; $$.t = consulta_ts( $1.v ); $$.c = $1.c; }
+NOME_VAR : TK_ID { $$ = Atributos($1.v, consulta_ts( $1.v ),$1.c ); }                    
          ; 
   
 %%
@@ -705,6 +718,9 @@ void preload() {
   tipo_opr["s==s"] = "b";
 
   // Resultados para o operador "&&"
+  tipo_opr["i%i"] = "i";
+
+  // Resultados para o operador "&&"
   tipo_opr["b&&b"] = "b";
 
   // Resultados para o operador "||"
@@ -801,7 +817,6 @@ string gera_label( string tipo ) {
 }
 
 string declara_variavel( string nome, TipoGeral tipo ) {
-
   if( tipos[ tipo.tipo_base ].compare("") == 0) 
     error( "Tipo inválido de variável: " + tipo.tipo_base );
 

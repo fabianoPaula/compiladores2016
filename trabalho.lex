@@ -36,14 +36,14 @@ COMMENT "(*"([^*]|"*"[^)])*"*)"
 
 "variaveis" { yylval = Atributos( yytext); return TK_VARIAVEIS; }
 
-"simounão"         { yylval = Atributos( yytext, "b" ); return TK_TIPO_SIMOUNAO; }
-"numero"           { yylval = Atributos( yytext, "i" ); return TK_TIPO_NUMERO; }
-"numeroComVirgula" { yylval = Atributos( yytext, "d" ); return TK_TIPO_NUMERO_COM_VIRGULA; }
-"letra"            { yylval = Atributos( yytext, "c" ); return TK_TIPO_LETRA; }
-"palavra"          { yylval = Atributos( yytext, "s" ); return TK_TIPO_PALAVRA; }
+"simounão"         { yylval = Atributos( yytext, TipoGeral("b") ); return TK_TIPO_SIMOUNAO; }
+"numero"           { yylval = Atributos( yytext, TipoGeral("i") ); return TK_TIPO_NUMERO; }
+"numeroComVirgula" { yylval = Atributos( yytext, TipoGeral("d") ); return TK_TIPO_NUMERO_COM_VIRGULA; }
+"letra"            { yylval = Atributos( yytext, TipoGeral("c") ); return TK_TIPO_LETRA; }
+"palavra"          { yylval = Atributos( yytext, TipoGeral("s") ); return TK_TIPO_PALAVRA; }
 
-"verdade"          { yylval = Atributos( yytext, "b" ); return TK_MENTIRA; }
-"mentira"          { yylval = Atributos( yytext, "b" ); return TK_VERDADE; }
+"verdade"          { yylval = Atributos( yytext, TipoGeral("b") ); return TK_MENTIRA; }
+"mentira"          { yylval = Atributos( yytext, TipoGeral("b") ); return TK_VERDADE; }
 
 "se"               { yylval = Atributos( yytext); return TK_SE; }
 "faz"              { yylval = Atributos( yytext); return TK_FAZ; }
@@ -78,10 +78,10 @@ COMMENT "(*"([^*]|"*"[^)])*"*)"
 
 [Pp][Ee][Rr][Tt][Ee][Nn][Cc][Ee] { yylval = Atributos( yytext ); return TK_PERTENCE; }
 
-{CSTRING}  { yylval = Atributos( troca_aspas(yytext), "s" ); return TK_CSTRING; }
+{CSTRING}  { yylval = Atributos( troca_aspas(yytext), TipoGeral("s") ); return TK_CSTRING; }
 {ID}       { yylval = Atributos( yytext ); return TK_ID; }
-{INT}      { yylval = Atributos( yytext, "i" ); return TK_CINT; }
-{DOUBLE}   { yylval = Atributos( yytext, "d" ); return TK_CDOUBLE; }
+{INT}      { yylval = Atributos( yytext, TipoGeral("i") ); return TK_CINT; }
+{DOUBLE}   { yylval = Atributos( yytext, TipoGeral("d") ); return TK_CDOUBLE; }
 
 .          { yylval = Atributos( yytext ); return *yytext; }
 
