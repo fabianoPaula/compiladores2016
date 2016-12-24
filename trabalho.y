@@ -1,4 +1,5 @@
 %{
+
 #include <string>
 #include <iostream>
 #include <vector>
@@ -160,6 +161,8 @@ Atributos gera_codigo_teste_matrix(Atributos s1,Atributos s2,Atributos s3);
 Atributos gera_codigo_if( Atributos expr, string cmd_then, string cmd_else );
 Atributos gera_codigo_atrib(Atributos esquerda, Atributos direita);
 Atributos gera_codigo_writeln(Atributos expr);
+Atributos gera_codigo_write(Atributos expr);
+Atributos gera_codigo_to_fora(Atributos expr);
 Atributos gera_codigo_readln(Atributos expr, Atributos variavel_leitura);
 
 
@@ -198,10 +201,10 @@ string decls =
 %token TK_VARIAVEIS TK_TIPO_NUMERO TK_TIPO_NUMERO_COM_VIRGULA TK_TIPO_LETRA TK_TIPO_PALAVRA TK_TIPO_SIMOUNAO
 
 // Entrada e Saida
-%token TK_ESCREVEAI TK_LEISSOAI
+%token TK_ESCREVEAI TK_LEISSOAI TK_ESCREVEAISEMPULARLINHA
 
 // Comando de selecão
-%token TK_SE TK_FAZ TK_SENAO
+%token TK_SE TK_FAZ TK_SENAO TK_TOFORA 
 
 // Comando de Repetição
 
@@ -209,7 +212,7 @@ string decls =
 %token TK_ENQUANTO TK_VAI TK_ATE TK_FACA
 
 // Comando de escolha
-%token TK_CASO TK_ESCOLHE TK_ENTRE TK_VLW TK_PADRAO
+%token TK_CASO TK_ESCOLHE TK_ENTRE TK_VLW TK_PADRAO 
 
 // Comando Break
 %token TK_BELEZA 
@@ -330,7 +333,7 @@ IDS : TK_ID ',' IDS { $3.lista_str.push_back($1.v); $$ = $3; }
 
 // Declaração  do método Principal
 
-MAIN : TK_TENTE TK_INICIAR TK_DEVOLVE TIPO_VAR BLOCO_VARS BLOCO { $$.c = $5.c +"int main("+ clean_vars($1.c) +"){\n" + $6.var_temp + $6.c + "l_exit:;\n  return 0;\n}"; }
+MAIN : TK_TENTE TK_INICIAR TK_DEVOLVE TIPO_VAR BLOCO_VARS BLOCO { $$.c = "int main("+ clean_vars($1.c) +"){\n" + $5.c + $6.var_temp + $6.c + "l_exit:;\n  return 0;\n}"; }
      | TK_TENTE TK_INICIAR TK_DEVOLVE TIPO_VAR BLOCO {  $$.c = "int main("+ clean_vars($1.c) +"){ \n" + $5.var_temp + $5.c + "}"; }  
      ;
 
@@ -345,6 +348,7 @@ CMDS : CMD ';' CMDS
      ;  
      
 CMD : WRITELN
+    | WRITE
     | READLN
     | ATRIB 
     | BLOCO 
@@ -355,6 +359,7 @@ CMD : WRITELN
     | CMD_IF
     | CMD_RETORNA
     | CMD_LING
+    | CMD_TOFORA
     ; 
 
 
@@ -480,7 +485,7 @@ PADRAO : TK_PADRAO ':' CMDS {
 BELEZA : TK_BELEZA ';'
        ;
 
-CMD_WHILE : TK_ENQUANTO E TK_FACA CMD 
+CMD_WHILE : TK_ENQUANTO E TK_FAZ CMD 
             {
               if( testa_tipoVariavel($2.t,TipoGeral("b")) )
                 error("Atribuição com tipos errados errados! "+ $2.t.tipo_base +" <- b");
@@ -501,9 +506,9 @@ CMD_WHILE : TK_ENQUANTO E TK_FACA CMD
             }
           ;
 
-CMD_DO_WHILE : TK_FACA BLOCO TK_ENQUANTO E  
+CMD_DO_WHILE : TK_FAZ BLOCO TK_ENQUANTO E  
             {
-              if( testa_tipoVariavel($2.t,TipoGeral("b")) )
+              if( testa_tipoVariavel($4.t,TipoGeral("b")) )
                 error("Atribuição com tipos errados errados! "+ $2.t.tipo_base +" <- b");
 
               string label_inicio = gera_label( "inicio_do_while" );
@@ -520,7 +525,7 @@ CMD_DO_WHILE : TK_FACA BLOCO TK_ENQUANTO E
           ;
 
 
-CMD_FOR : TK_ENQUANTO NOME_VAR TK_ATRIB E TK_VAI TK_ATE E TK_FACA CMD 
+CMD_FOR : TK_ENQUANTO NOME_VAR TK_ATRIB E TK_VAI TK_ATE E TK_FAZ CMD 
           { 
             TipoGeral ss("i");
             
@@ -558,6 +563,12 @@ READLN : TK_LEISSOAI '(' E ',' F ')' { $$ =  gera_codigo_readln($3,$5); }
 
 WRITELN : TK_ESCREVEAI '(' E ')' { $$ =  gera_codigo_writeln($3); }
         ;
+
+WRITE : TK_ESCREVEAISEMPULARLINHA '(' E ')' { $$ =  gera_codigo_write($3); }
+      ;        
+
+CMD_TOFORA : TK_TOFORA '(' E ')' { $$ =  gera_codigo_to_fora($3); }
+      ;              
   
 ATRIB : F TK_ATRIB E { $$ = gera_codigo_atrib($1,$3); } 
       ;   
@@ -799,10 +810,14 @@ string gera_nome_var_temp( string tipo ) {
 }
 
 int testa_tipoVariavel(TipoGeral t1, TipoGeral t2){
+  if( (t1.tipo_base.compare("d") == 0) && (t2.tipo_base.compare("i") == 0 ) ) {
+    return 0;
+  }
+
   if( t1.tipo_base.compare(t2.tipo_base) != 0){
     cerr << "Tipos errados!" << endl;
     cerr << TipoGeralToString(t1) << endl;
-    cerr << TipoGeralToString(t1) << endl;
+    cerr << TipoGeralToString(t2) << endl;
    // error("Atribuição com tipos errados errados! "+ t1.tipo_base +" <- "+ t2.tipo_base);
     return 1;
   }  
@@ -860,7 +875,7 @@ string declara_param( string nome, TipoGeral tipo ) {
   string indice;
    
   switch( tipo.ndim ) {
-    case 0: indice = (tipo.tipo_base == "s" ? "[256]" : "");
+    case 0: indice = (tipo.tipo_base.compare("s") == 0 ? "[256]" : "");
             break;
               
     case 1: indice = "[" +toString(tipo.tam[0]*(tipo.tipo_base == "s" ? 256 : 1)) + "]";
@@ -894,7 +909,7 @@ string declara_funcao(string nome, TipoGeral tipo,vector<string> nomes_param, ve
 
   inserir_funcao_ts( nome,tipo,tipos_param);
       
-  return tipos[ tipo.tipo_base ] + " " + nome + "(" + aux + ")";
+  return tipos[ tipo.tipo_base ]+(tipo.tipo_base.compare("s") == 0 ? "*" : "") + " " + nome + "(" + aux + ")";
 }
 
 Atributos cria_variavel(vector<string> lista, TipoGeral tipo){
@@ -991,11 +1006,11 @@ Atributos gera_codigo_opr_in_vetor(Atributos s1, Atributos s2, Atributos result)
             "  " + condicao + " = " + v1 + " == " + v2 + ";\n"+
             "  " + condicao + " =  !" + condicao + ";\n" + 
             "  if( " + condicao + " ) goto " + label_falso + ";\n" +
-            "  " + result.v + " = 1;\n" +
+            "  " + result.v + " = 0;\n" +
             "  " + controle + " = " + controle + " + 1;\n" +
             "  goto " + label_teste + ";\n" +
             label_falso + ":;\n"
-            "  " + result.v + " = 0;\n" +
+            "  " + result.v + " = 1;\n" +
             label_fim + ":;\n";  
     result.var_temp += declara_variavel(condicao,TipoGeral("b")) +
                        declara_variavel(controle,TipoGeral("i")) +
@@ -1028,7 +1043,7 @@ Atributos gera_codigo_opr(Atributos s1, string opr, Atributos s2){
     result.c += "  strncpy( " + result.v + ", " + s1.v + ", 256 );\n" +
                 "  strncat( " + result.v + ", " + s2.v + ", 256 );\n";
   }else{
-    result.c += "  " + result.v + " = " + s1.v + opr + s2.v + ";\n";                
+    result.c += "  " + result.v + " = " + s1.v + " " + opr + " " + s2.v + ";\n";                
   }
   
   return result;
@@ -1150,6 +1165,42 @@ Atributos gera_codigo_writeln(Atributos expr){
               "  cout << " + variavel + ";\n  cout << endl;\n";
   }else{
       ss.c += "  cout << " + expr.v + ";\n  cout << endl;\n";
+  }
+
+  ss.var_temp = expr.var_temp 
+                  + declara_variavel(variavel,TipoGeral(expr.t.tipo_base));
+  return ss;
+}
+
+Atributos gera_codigo_write(Atributos expr){
+  Atributos ss;
+
+  string variavel =  gera_nome_var_temp(expr.t.tipo_base);
+
+  ss.c = expr.c;
+  if( expr.t.ndim != 0){
+      ss.c += "  " + variavel + " = " + expr.v + ";\n"+
+              "  cout << " + variavel + ";\n";
+  }else{
+      ss.c += "  cout << " + expr.v + ";\n";
+  }
+
+  ss.var_temp = expr.var_temp 
+                  + declara_variavel(variavel,TipoGeral(expr.t.tipo_base));
+  return ss;
+}
+
+Atributos gera_codigo_to_fora(Atributos expr){
+  Atributos ss;
+
+  string variavel =  gera_nome_var_temp(expr.t.tipo_base);
+
+  ss.c = expr.c;
+  if( expr.t.ndim != 0){
+      ss.c += "  " + variavel + " = " + expr.v + ";\n"+
+              "  exit(" + variavel + ");\n";
+  }else{
+      ss.c += "  exit(" + expr.v + ");\n";
   }
 
   ss.var_temp = expr.var_temp 

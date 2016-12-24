@@ -31,8 +31,10 @@ COMMENT "(*"([^*]|"*"[^)])*"*)"
 "favoravel"      { yylval = Atributos( yytext ); return TK_FAVORAVEL; }
 
 
-"escreveAi" { yylval = Atributos( yytext ); return TK_ESCREVEAI; }
-"leIssoAi" { yylval = Atributos( yytext ); return TK_LEISSOAI; }
+"escreveAi"              { yylval = Atributos( yytext ); return TK_ESCREVEAI; }
+"escreveAiSemPularLinha" { yylval = Atributos( yytext ); return TK_ESCREVEAISEMPULARLINHA; }
+"leIssoAi"               { yylval = Atributos( yytext ); return TK_LEISSOAI; }
+"toFora"               { yylval = Atributos( yytext ); return TK_TOFORA; }
 
 "variaveis" { yylval = Atributos( yytext); return TK_VARIAVEIS; }
 

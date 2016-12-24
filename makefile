@@ -1,14 +1,14 @@
-all: trabalho.out entrada.wpp
-	./trabalho.out < entrada.wpp > gerado.cc
-	cat gerado.cc
-	g++ -std=c++11 -o program.out gerado.cc -lfl
-	./program.out
+all: build/trabalho.out entrada.wpp
+	./build/trabalho.out < entrada.wpp > build/gerado.cc
+	./gabarito < build/gerado.cc
+	g++ -std=c++11 -o ./build/program.out build/gerado.cc -lfl
+	./build/program.out
 
-lex.yy.c: trabalho.lex
-	lex trabalho.lex
+build/lex.yy.c: trabalho.lex
+	lex -o ./build/lex.yy.c trabalho.lex 
 
-y.tab.c: trabalho.y
-	yacc trabalho.y -v
+build/y.tab.c: trabalho.y
+	yacc -o ./build/y.tab.c trabalho.y -v
 
-trabalho.out: lex.yy.c y.tab.c
-	g++ -std=c++11 -o trabalho.out y.tab.c -lfl
+build/trabalho.out: build/lex.yy.c build/y.tab.c
+	g++ -std=c++11 -o ./build/trabalho.out ./build/y.tab.c -lfl
